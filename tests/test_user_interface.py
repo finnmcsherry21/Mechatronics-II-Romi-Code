@@ -214,6 +214,9 @@ class FakeImu:
     def operating_mode_imuplus(self):
         self.imuplus_calls += 1
 
+    def wait_for_mode(self):
+        return None
+
     def calibration_status(self):
         return self.status
 
@@ -405,8 +408,8 @@ class UserInterfaceTests(unittest.TestCase):
 
         self.press("mwasde")
         self.assertEqual(self.user_interface.state, self.user_module.TaskUser.MENU)
-        self.assertEqual(self.left_motor_task.setpoints[-4:], [7.5, 7.5, -7.5, -7.5])
-        self.assertEqual(self.right_motor_task.setpoints[-4:], [7.5, -7.5, -7.5, 7.5])
+        self.assertEqual(self.left_motor_task.setpoints[-4:], [7.5, -7.5, -7.5, 7.5])
+        self.assertEqual(self.right_motor_task.setpoints[-4:], [7.5, 7.5, -7.5, -7.5])
 
     def test_completed_imu_calibration_saves_and_restores_normal_mode(self):
         self.imu_sensor.status = 0xff
@@ -414,9 +417,18 @@ class UserInterfaceTests(unittest.TestCase):
         self.clock.milliseconds = 25
         next(self.runner)
 
+        self.assertEqual(
+            self.user_interface.state,
+            self.user_module.TaskUser.IMU_CALIBRATION
+        )
+        self.assertEqual(len(self.saved_imu_calibrations), 0)
+
+        self.press("w")
+
         self.assertEqual(self.user_interface.state, self.user_module.TaskUser.MENU)
         self.assertEqual(len(self.saved_imu_calibrations), 1)
-        self.assertEqual(self.imu_sensor.imuplus_calls, 1)
+        self.assertEqual(self.imu_sensor.configuration_calls, 1)
+        self.assertEqual(self.imu_sensor.imuplus_calls, 2)
 
 
 if __name__ == "__main__":

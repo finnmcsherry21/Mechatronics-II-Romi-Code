@@ -45,7 +45,7 @@ class LineSensorArray:
         self.calibration_black_values = None
         self.calibration_stage = 0
         self.center_sensor = 6.0
-        self.line_detect_threshold = 0.20
+        self.line_detect_threshold = 0.10
 
         data_size = 250
         self.log_time = array.array('f', [0] * data_size)
@@ -270,10 +270,8 @@ class LineController:
         if self.line_integral_gain and elapsed_time > 0:
             self.line_integral += self.line_error * elapsed_time
 
-        correction = 10 * (
-            self.line_proportional_gain * self.line_error +
+        correction = self.line_proportional_gain * self.line_error + \
             self.line_integral_gain * self.line_integral
-        )
         maximum_correction = 0.5 * abs(self.velocity_setpoint)
         correction = max(-maximum_correction, min(maximum_correction, correction))
 
@@ -282,14 +280,14 @@ class LineController:
                     (correction < 0 and self.line_error < 0):
                 self.line_integral -= self.line_error * elapsed_time
 
-        self.left_velocity_setpoint = self.velocity_setpoint - correction
-        self.right_velocity_setpoint = self.velocity_setpoint + correction
+        self.left_velocity_setpoint = self.velocity_setpoint + correction
+        self.right_velocity_setpoint = self.velocity_setpoint - correction
 
     def run(self):
         while True:
             if self.enabled:
                 if self.lane_switch_active:
-                    self.lane_switch_controller.update(self.line_sensor_array)
+                    self.lane_switch_controller.update()
                 else:
                     self.line_sensor_array.update(self)
 
@@ -312,20 +310,20 @@ class LaneSwitchController:
         self.lane_width = float(lane_width)
         self.turn_direction = 1 if turn_direction >= 0 else -1
         self.wheel_radius = float(wheel_radius)
-        self.departure_yaw_rate = 0.8
-        self.yaw_rate_gain = 3.0
+        self.departure_yaw_rate = 0.35
+        self.yaw_rate_gain = 2.0
         self.timeout_ms = 8000
         self.DEPARTURE = 1
         self.RETURN = 2
         self.active = False
         self.state = 0
-        self.clear_of_departure_line = False
-        self.target_line_count = 0
         self.initial_heading = 0.0
         self.relative_heading = 0.0
         self.lateral_position = 0.0
+        self.forward_distance = 0.0
         self.previous_time = 0
         self.start_time = 0
+        self.next_distance_time = 0
 
     def wrap_angle(self, angle):
         return (angle + math.pi) % (2 * math.pi) - math.pi
@@ -338,14 +336,16 @@ class LaneSwitchController:
         self.active = True
         self.state = self.DEPARTURE
         self.turn_direction = 1 if turn_direction >= 0 else -1
-        self.clear_of_departure_line = False
-        self.target_line_count = 0
         self.initial_heading, _, _ = self.imu_sensor.euler()
         self.relative_heading = 0.0
         self.lateral_position = 0.0
+        self.forward_distance = 0.0
         self.previous_time = time.ticks_us()
         self.start_time = time.ticks_ms()
+        self.next_distance_time = self.start_time
         self.line_controller.lane_switch_active = True
+        if self.line_controller.line_sensor_array is not None:
+            self.line_controller.line_sensor_array.disable_emitters()
         direction_name = "left" if self.turn_direction > 0 else "right"
         print("Lane switch started to the {}.".format(direction_name))
         return True
@@ -356,8 +356,11 @@ class LaneSwitchController:
         self.line_controller.lane_switch_active = False
         self.line_controller.line_integral = 0.0
         self.line_controller.clear_lane_setpoints()
-        print("Lane switch {}. Lateral estimate: {:.3f} m".format(
-            reason, self.lateral_position))
+        if reason == "distance reached" and \
+                self.line_controller.line_sensor_array is not None:
+            self.line_controller.line_sensor_array.enable_emitters()
+        print("Lane switch {}. Lateral estimate: {:.3f} m, forward distance: {:.3f} m".format(
+            reason, abs(self.lateral_position), self.forward_distance))
 
     def update_dead_reckoning(self):
         current_time = time.ticks_us()
@@ -373,6 +376,7 @@ class LaneSwitchController:
         current_heading, _, _ = self.imu_sensor.euler()
         self.relative_heading = self.wrap_angle(current_heading - self.initial_heading)
         self.lateral_position += forward_speed * math.sin(self.relative_heading) * elapsed_time
+        self.forward_distance += abs(forward_speed * elapsed_time)
 
     def update_setpoints(self, target_yaw_rate):
         measured_yaw_rate = self.imu_sensor.yaw_rate()
@@ -385,30 +389,30 @@ class LaneSwitchController:
             velocity - correction,
             velocity + correction
         )
-    def update(self, line_sensor_array):
+    def update(self):
         if not self.active:
             return
 
         self.update_dead_reckoning()
 
+        current_time = time.ticks_ms()
+        if time.ticks_diff(current_time, self.next_distance_time) >= 0:
+            self.next_distance_time = time.ticks_add(current_time, 250)
+            print("Estimated lateral distance: {:.3f} m, forward distance: {:.3f} m".format(
+                abs(self.lateral_position), self.forward_distance))
+
         if self.state == self.DEPARTURE:
             self.update_setpoints(self.turn_direction * self.departure_yaw_rate)
 
-            if not line_sensor_array.line_detected():
-                self.clear_of_departure_line = True
+            if abs(self.lateral_position) >= self.lane_width / 2:
                 self.state = self.RETURN
-                print("Departure line cleared. Turning toward target line.")
+                print("Halfway to target lane. Returning toward target line.")
 
         elif self.state == self.RETURN:
             self.update_setpoints(-self.turn_direction * self.departure_yaw_rate)
 
-            if self.clear_of_departure_line and line_sensor_array.line_detected():
-                if abs(self.lateral_position) >= self.lane_width / 2:
-                    self.target_line_count += 1
-                    if self.target_line_count >= 3:
-                        self.stop("target line captured")
-            else:
-                self.target_line_count = 0
+            if abs(self.lateral_position) >= self.lane_width:
+                self.stop("distance reached")
 
         if self.active and \
                 time.ticks_diff(time.ticks_ms(), self.start_time) >= self.timeout_ms:

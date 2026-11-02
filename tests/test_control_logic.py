@@ -8,7 +8,7 @@
 # 3. test_line_calibration_rejects_missing_keys
 # 4. test_imu_calibration_requires_bytes
 # 5. test_imuplus_mode_and_yaw_rate_use_expected_units
-# 6. test_lane_switch_captures_target_after_clearing_departure_line
+# 6. test_lane_switch_reaches_dead_reckoned_distance
 # 7. test_lane_switch_times_out_safely
 # 8. test_control_and_logging_happen_each_scheduled_pass
 # 9. test_motor_and_line_setpoints_are_limited
@@ -82,6 +82,9 @@ class FakeTime:
     def ticks_diff(self, new, old):
         return new - old
 
+    def ticks_add(self, value, offset):
+        return value + offset
+
 
 class FakeWheelEncoder:
     def __init__(self):
@@ -132,6 +135,7 @@ class FakeLineController:
         self.setpoints = None
         self.cleared = False
         self.stop_count = 0
+        self.line_sensor_array = None
 
     def set_lane_setpoints(self, left_setpoint, right_setpoint):
         self.setpoints = (left_setpoint, right_setpoint)
@@ -266,11 +270,10 @@ class LaneSwitchTests(unittest.TestCase):
             self.imu_sensor
         )
 
-    def test_lane_switch_captures_target_after_clearing_departure_line(self):
+    def test_lane_switch_reaches_dead_reckoned_distance(self):
         self.assertTrue(self.lane_switch.start(1))
-        line_sensor_array = FakeLineSensorArray([False, True, True, True])
         self.clock.advance(20)
-        self.lane_switch.update(line_sensor_array)
+        self.lane_switch.update()
         self.assertTrue(self.line_controller.lane_switch_active)
         self.assertIsNotNone(self.line_controller.setpoints)
         self.assertLess(self.line_controller.setpoints[0], 7.5)
@@ -278,23 +281,25 @@ class LaneSwitchTests(unittest.TestCase):
 
         self.lane_switch.lateral_position = 0.10
         self.clock.advance(20)
-        self.lane_switch.update(line_sensor_array)
+        self.lane_switch.update()
         self.assertTrue(self.line_controller.lane_switch_active)
 
         self.clock.advance(20)
-        self.lane_switch.update(line_sensor_array)
+        self.lane_switch.update()
         self.assertTrue(self.line_controller.lane_switch_active)
+        self.assertGreater(self.line_controller.setpoints[0], 7.5)
+        self.assertLess(self.line_controller.setpoints[1], 7.5)
 
+        self.lane_switch.lateral_position = 0.20
         self.clock.advance(20)
-        self.lane_switch.update(line_sensor_array)
+        self.lane_switch.update()
         self.assertFalse(self.line_controller.lane_switch_active)
         self.assertTrue(self.line_controller.cleared)
 
     def test_lane_switch_times_out_safely(self):
         self.assertTrue(self.lane_switch.start(-1))
-        line_sensor_array = FakeLineSensorArray([True])
         self.clock.advance(self.lane_switch.timeout_ms + 1)
-        self.lane_switch.update(line_sensor_array)
+        self.lane_switch.update()
         self.assertFalse(self.line_controller.lane_switch_active)
         self.assertTrue(self.line_controller.cleared)
         self.assertEqual(self.line_controller.stop_count, 1)
@@ -356,18 +361,18 @@ class MotorControlTaskTests(unittest.TestCase):
         clock.advance(20)
         line_controller.update_setpoints()
         first_left_setpoint = line_controller.left_velocity_setpoint
-        self.assertLess(first_left_setpoint, 8.0)
-        self.assertGreater(line_controller.right_velocity_setpoint, 8.0)
+        self.assertGreater(first_left_setpoint, 8.0)
+        self.assertLess(line_controller.right_velocity_setpoint, 8.0)
 
         clock.advance(20)
         line_controller.update_setpoints()
-        self.assertLess(line_controller.left_velocity_setpoint, first_left_setpoint)
+        self.assertGreater(line_controller.left_velocity_setpoint, first_left_setpoint)
 
         line_controller.set_line_error(-1.0)
         clock.advance(20)
         line_controller.update_setpoints()
-        self.assertGreater(line_controller.left_velocity_setpoint, 8.0)
-        self.assertLess(line_controller.right_velocity_setpoint, 8.0)
+        self.assertLess(line_controller.left_velocity_setpoint, 8.0)
+        self.assertGreater(line_controller.right_velocity_setpoint, 8.0)
 
 
 if __name__ == "__main__":

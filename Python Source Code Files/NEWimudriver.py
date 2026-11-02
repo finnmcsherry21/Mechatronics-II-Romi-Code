@@ -42,11 +42,9 @@ class BNO055:
 
     def operating_mode_configuration(self):
         self._i2c.mem_write(BNO055.CONFIG_MODE, self.DEV_ADDR, 0x3D)
-        print("BNO055 operating mode set to CONFIG.")
 
     def operating_mode_imuplus(self):
         self._i2c.mem_write(BNO055.IMUPLUS_MODE, self.DEV_ADDR, 0x3D)
-        print("BNO055 operating mode set to IMUPLUS.")
 
     def wait_for_mode(self):
         sleep(0.025)

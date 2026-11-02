@@ -18,7 +18,7 @@ user_flows = [
     (9, ["MENU", "LEFT TEST", "MOTOR DATA", "MENU"], ["L", "Done/E", "End of data"]),
     (8, ["MENU", "RIGHT TEST", "MOTOR DATA", "MENU"], ["R", "Done/E", "End of data"]),
     (7, ["MENU", "LINE CALIBRATION", "MENU"], ["C", "B, W/E"]),
-    (6, ["MENU", "IMU CALIBRATION", "MENU"], ["I", "3/3/E"]),
+    (6, ["MENU", "IMU CALIBRATION", "MENU"], ["I", "3/3, then W/E"]),
     (5, ["MENU", "LINE FOLLOWING", "LANE DIRECTION", "LINE FOLLOWING"], ["D", "S", "L/R/E"]),
     (4, ["LINE FOLLOWING", "LINE DATA", "MENU"], ["E", "End of data"]),
     (3, ["LINE FOLLOWING", "MENU"], ["Controller stops"]),
@@ -58,7 +58,7 @@ lane_axis.axis("off")
 
 lane_flows = [
     (5, ["INACTIVE", "DEPARTURE", "RETURN", "INACTIVE"],
-     ["Start: L/R", "Departure line lost", "Target line: 3 detections\nat least 0.10 m away"]),
+     ["Start: L/R", "Dead reckoning reaches\n0.10 m lateral distance", "Dead reckoning reaches\n0.20 m lateral distance"]),
     (3.5, ["DEPARTURE", "INACTIVE"], ["8 s timeout: stop motors"]),
     (2, ["RETURN", "INACTIVE"], ["8 s timeout: stop motors"]),
 ]

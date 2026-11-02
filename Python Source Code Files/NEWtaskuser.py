@@ -46,8 +46,6 @@ class TaskUser:
         self.output_motor_task = None
         self.print_index = -1
 
-        self.print_help()
-
     def print_help(self):
         print("+------------------------------------------------------------------------------+")
         print("| ME 4305 Romi Tuning Interface Help Menu                                      |")
@@ -281,7 +279,7 @@ class TaskUser:
         self.imu_sensor.operating_mode_imuplus()
         self.next_imu_status_time = time.ticks_add(time.ticks_ms(), 25)
         print("Starting IMU calibration. Move the robot until all values are 3/3.")
-        print("Press E to cancel.")
+        print("Press W to save after the IMU is calibrated, or E to cancel.")
         self.state = TaskUser.IMU_CALIBRATION
 
     def update_menu(self):
@@ -403,12 +401,12 @@ class TaskUser:
             self.right_motor_task.set_setpoint(-self.manual_speed)
 
         elif command == "a":
-            self.left_motor_task.set_setpoint(self.manual_speed)
-            self.right_motor_task.set_setpoint(-self.manual_speed)
-
-        elif command == "d":
             self.left_motor_task.set_setpoint(-self.manual_speed)
             self.right_motor_task.set_setpoint(self.manual_speed)
+
+        elif command == "d":
+            self.left_motor_task.set_setpoint(self.manual_speed)
+            self.right_motor_task.set_setpoint(-self.manual_speed)
 
         elif command == "e":
             self.stop_driving()
@@ -426,9 +424,6 @@ class TaskUser:
             self.state = TaskUser.MENU
             return
 
-        if command is not None:
-            print("Press E to cancel IMU calibration.")
-
         status = self.imu_sensor.calibration_status()
         gyro = (status >> 4) & 0x03
         accel = (status >> 2) & 0x03
@@ -438,17 +433,29 @@ class TaskUser:
             self.next_imu_status_time = time.ticks_add(now, 500)
             print("IMU: G:{}/3 A:{}/3".format(gyro, accel))
 
-        if gyro == 3 and accel == 3:
+        if command == "w":
+            if gyro != 3 or accel != 3:
+                print("Keep moving the robot until gyro and accelerometer are 3/3.")
+                return
+
             try:
+                self.imu_sensor.operating_mode_configuration()
+                self.imu_sensor.wait_for_mode()
                 NEWimu_calibration.save_calibration(
                     "NEWimu_calibration.json",
                     self.imu_sensor.calibration_profile_read()
                 )
                 print("Saved calibration to NEWimu_calibration.json.")
-            except OSError as error:
+                self.state = TaskUser.MENU
+
+            except (OSError, ValueError) as error:
                 print("Calibration was not saved:", error)
 
-            self.state = TaskUser.MENU
+            self.imu_sensor.operating_mode_imuplus()
+            self.imu_sensor.wait_for_mode()
+
+        elif command is not None:
+            print("Press W to save after the IMU is 3/3, or E to cancel.")
 
     def update_line_following(self):
         if not self.line_controller.enabled:
