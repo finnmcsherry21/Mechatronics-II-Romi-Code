@@ -17,8 +17,6 @@ class ClosedLoop:
 
 
     def set_gains(self, k_p, k_i):
-        print(k_p, k_i)
-
         k_p = float(k_p)
         k_i = float(k_i)
 
