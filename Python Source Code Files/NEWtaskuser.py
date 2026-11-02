@@ -149,9 +149,10 @@ class TaskUser:
                 ser.write(char_in)
                 self.number_buffer.append(char_in)
 
-        elif char_in == "\x7f" and len(self.number_buffer) > 0:
-            ser.write(char_in)
-            self.number_buffer.pop()
+        elif char_in == "\x7f":
+            if len(self.number_buffer) > 0:
+                ser.write(char_in)
+                self.number_buffer.pop()
             self.number_invalid = False
 
         elif char_in in {"\r", "\n"}:
@@ -235,6 +236,7 @@ class TaskUser:
         self.state = TaskUser.LINE_CALIBRATION
 
     def finish_line_sensor_calibration(self):
+        saved = False
 
         try:
             calibration = {
@@ -249,12 +251,16 @@ class TaskUser:
                 50
             )
             print("Saved calibration to NEWline_calibration.json.")
+            saved = True
 
         except (OSError, ValueError) as error:
             print("Calibration was not saved:", error)
 
         self.line_sensor_array.disable_emitters()
-        print("Line sensor calibration complete. User commands enabled.")
+        if saved:
+            print("Line sensor calibration complete. User commands enabled.")
+        else:
+            print("Calibration is active until restart. Press C to save it again.")
         self.state = TaskUser.MENU
 
     def update_line_sensor_calibration(self):
@@ -262,6 +268,7 @@ class TaskUser:
 
         if command == "e":
             self.line_sensor_array.disable_emitters()
+            self.line_sensor_array.calibration_stage = 0
             print("Line sensor calibration cancelled.")
             self.state = TaskUser.MENU
 

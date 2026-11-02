@@ -367,6 +367,7 @@ class UserInterfaceTests(unittest.TestCase):
         self.press("e")
         self.assertEqual(self.user_interface.state, self.user_module.TaskUser.MENU)
         self.assertFalse(self.line_sensor_array.emitters_enabled)
+        self.assertEqual(self.line_sensor_array.calibration_stage, 0)
 
     def test_imu_line_following_lane_switch_and_manual_commands(self):
         self.press("i")
