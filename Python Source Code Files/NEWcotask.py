@@ -28,11 +28,36 @@
 # FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
 # details.
 
-import micropython                     # This shuts up incorrect warnings
+import micropython
+import utime
 
-from NEWrunningstats import RunningStats
 
-import utime                           # Micropython version of time library
+class RunningStatistics:
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.count = 0
+        self.mean = 0.0
+        self.sum_squared_difference = 0.0
+        self.maximum = 0.0
+
+    def update(self, value):
+        value = float(value)
+        self.count += 1
+        difference = value - self.mean
+        self.mean += difference / self.count
+        self.sum_squared_difference += difference * (value - self.mean)
+
+        if self.count == 1 or value > self.maximum:
+            self.maximum = value
+
+    @property
+    def std(self):
+        if self.count < 2:
+            return 0.0
+        return (self.sum_squared_difference / self.count) ** 0.5
 
 _PROF_HEADER = ('┌───────────┬───┬───────┬──────┬───────────────────────┬───────────────────────┐\n'
                 '│           │   │       │      │     DURATION (ms)     │     LATENCY (ms)      │\n'
@@ -128,8 +153,8 @@ class Task:
             self._next_run = None
 
         # Parameters used by the profiler to track task performance
-        self._runtime_stats = RunningStats()
-        self._latency_stats = RunningStats()
+        self._runtime_stats = RunningStatistics()
+        self._latency_stats = RunningStatistics()
 
         # Flag which enables profiling of execution time and basic statistics.
         self._prof = profile
@@ -184,7 +209,7 @@ class Task:
         # so, set go flag and set the timer to go off at the next run time
         if self.period is not None:
             late = utime.ticks_diff(utime.ticks_us(), self._next_run)
-            if late > 0:
+            if late >= 0:
                 self.go_flag = True
                 self._next_run = utime.ticks_add(self._next_run, self.period)
 
@@ -230,20 +255,20 @@ class Task:
                     self.period/1000,
                     self._runs,
                     self._runtime_stats.mean/1000,
-                    self._runtime_stats.max/1000,
+                    self._runtime_stats.maximum/1000,
                     self._runtime_stats.std/1000,
                     self._latency_stats.mean/1000,
-                    self._latency_stats.max/1000,
+                    self._latency_stats.maximum/1000,
                     self._latency_stats.std/1000)
         else:
             return (self.name,
                     self.priority,
                     self._runs,
                     self._runtime_stats.mean/1000,
-                    self._runtime_stats.max/1000,
+                    self._runtime_stats.maximum/1000,
                     self._runtime_stats.std/1000,
                     self._latency_stats.mean/1000,
-                    self._latency_stats.max/1000,
+                    self._latency_stats.maximum/1000,
                     self._latency_stats.std/1000)
 
     # This method converts the task to a string for diagnostic use.

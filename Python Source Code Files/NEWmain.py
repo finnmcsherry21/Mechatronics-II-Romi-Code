@@ -1,110 +1,84 @@
 
 from pyb import Pin, Timer, I2C
-# import utime
-import time
-import pyb
 import NEWimu_calibration
 
-from NEWmotor import MotorDriver
-from NEWencoder import Encoder
-import NEWtaskmotor
 import NEWtaskuser
-
 import NEWcotask
 import array
-import NEWtaskline
 import NEWline_calibration
-import NEWoutercontroller
 import gc
 from NEWimudriver import BNO055
+from NEWdrive import MotorDriver, WheelEncoder, MotorControlTask
+from NEWlinecontrol import LineSensorArray, LineController
 
 
 # ----- Motor setup -----
-pwm_tim = Timer(1, freq=20_000)
-left_motor = MotorDriver(Pin.cpu.A8, Pin.cpu.B7, Pin.cpu.B6, pwm_tim, 1) # Order: PWM, Direction, Enable, Timer, Channel
-right_motor = MotorDriver(Pin.cpu.A9, Pin.cpu.B2, Pin.cpu.A10, pwm_tim, 2)
+pwm_timer = Timer(1, freq=20_000)
+left_motor_driver = MotorDriver(Pin.cpu.A8, Pin.cpu.B7, Pin.cpu.B6, pwm_timer, 1)
+right_motor_driver = MotorDriver(Pin.cpu.A9, Pin.cpu.B2, Pin.cpu.A10, pwm_timer, 2)
 
 
 # ----- Encoder hardware setup -----
 left_encoder_timer = Timer(3, prescaler=0, period=65535)
-left_encoder_timer.channel(1, pin=Pin.cpu.B4, mode=Timer.ENC_AB) # Channel A
-left_encoder_timer.channel(2, pin=Pin.cpu.B5, mode=Timer.ENC_AB) # Channel B
+left_encoder_timer.channel(1, pin=Pin.cpu.B4, mode=Timer.ENC_AB)
+left_encoder_timer.channel(2, pin=Pin.cpu.B5, mode=Timer.ENC_AB)
 
 right_encoder_timer = Timer(2, prescaler=0, period=65535)
-right_encoder_timer.channel(1, pin=Pin.cpu.A15, mode=Timer.ENC_AB) # Channel A
-right_encoder_timer.channel(2, pin=Pin.cpu.B3, mode=Timer.ENC_AB) # Channel B
+right_encoder_timer.channel(1, pin=Pin.cpu.A15, mode=Timer.ENC_AB)
+right_encoder_timer.channel(2, pin=Pin.cpu.B3, mode=Timer.ENC_AB)
 
 # IMU setup
-i2c = I2C(2, I2C.MASTER, baudrate=100000)
-imu = BNO055(i2c)
-chip_id = imu.read_chip_id()
+imu_i2c = I2C(2, I2C.MASTER, baudrate=100000)
+imu_sensor = BNO055(imu_i2c)
+chip_id = imu_sensor.read_chip_id()
 print(f"IMU chip ID: {hex(chip_id)}")
+if chip_id != 0xA0:
+    print("Warning: BNO055 chip ID is incorrect. Check IMU wiring before driving.")
 
-
-# ----- Encoder objects -----
-
-def print_imu_heading():
-    while True:
-        heading, roll, pitch = imu.euler()
-        print("IMU heading: {:.2f} degrees".format(heading))
-        yield 0
-        
-def print_yaw_rate():
-    while True:
-        yaw_rate = imu.yaw_rate()
-        print("IMU yaw rate: {:.2f} rad/s".format(yaw_rate))
-        yield 0
 
 def main():
     
-    left_encoder = Encoder(left_encoder_timer, direction=-1)
-    right_encoder = Encoder(right_encoder_timer, direction=-1)
+    left_wheel_encoder = WheelEncoder(left_encoder_timer, direction=-1)
+    right_wheel_encoder = WheelEncoder(right_encoder_timer, direction=-1)
 
-    # preallocate arrays for data storage with a fixed size of 1000 elements
+    # Preallocate arrays for five seconds of 20 ms motor data.
     size = 250
-    #left_effort = array.array('f', [0] * size)
-    left_position = array.array('f', [0] * size)
-    left_velocity = array.array('f', [0] * size)
-    left_time = array.array('f', [0] * size)
-    left_voltage = array.array('f', [0] * size)
-    left_setpoint = array.array('f', [0] * size)
-    #left_kp = array.array('f', [0] * size)
-    #left_ki = array.array('f', [0] * size)
-
-    #right_effort = array.array('f', [0] * size)
-    right_position = array.array('f', [0] * size)
-    right_velocity = array.array('f', [0] * size)
-    right_time = array.array('f', [0] * size)
-    right_voltage = array.array('f', [0] * size)
-    right_setpoint = array.array('f', [0] * size)
-    #right_kp = array.array('f', [0] * size)
-    #right_ki = array.array('f', [0] * size)
-    
-    velocity_setpoint = 0
-    y_hat = 0
-    kp_line = 0
-    ki_line = 0
+    left_log_position = array.array('f', [0] * size)
+    left_log_velocity = array.array('f', [0] * size)
+    left_log_time = array.array('f', [0] * size)
+    left_log_voltage = array.array('f', [0] * size)
+    left_log_setpoint = array.array('f', [0] * size)
+    right_log_position = array.array('f', [0] * size)
+    right_log_velocity = array.array('f', [0] * size)
+    right_log_time = array.array('f', [0] * size)
+    right_log_voltage = array.array('f', [0] * size)
+    right_log_setpoint = array.array('f', [0] * size)
       
     gc.collect()  # Run garbage collection to free up memory before starting tasks 
 
-    # Create TaskMotor instances for left and right motors and taskuser instance for user input
-    left_task = NEWtaskmotor.TaskMotor(left_motor, left_encoder, left_time, left_position, left_velocity, left_voltage, left_setpoint)
-    right_task = NEWtaskmotor.TaskMotor(right_motor, right_encoder, right_time, right_position, right_velocity, right_voltage, right_setpoint)
-    task_line = NEWtaskline.TaskLine(imu)
-    outer_controller = NEWoutercontroller.OuterController(imu, left_task, right_task, kp_line, ki_line, velocity_setpoint, y_hat)
-    task_user = NEWtaskuser.TaskUser(left_task, right_task, outer_controller, left_time, left_position, left_velocity, left_voltage, left_setpoint, task_line, imu)
+    # Create motor, line, outer-controller, and user-interface objects.
+    left_motor_task = MotorControlTask(left_motor_driver, left_wheel_encoder, left_log_time, left_log_position, left_log_velocity, left_log_voltage, left_log_setpoint)
+    right_motor_task = MotorControlTask(right_motor_driver, right_wheel_encoder, right_log_time, right_log_position, right_log_velocity, right_log_voltage, right_log_setpoint)
+    line_sensor_array = LineSensorArray()
+    line_controller = LineController(
+        left_motor_task,
+        right_motor_task,
+        line_sensor_array,
+        imu_sensor
+    )
+    user_interface = NEWtaskuser.TaskUser(left_motor_task, right_motor_task, line_controller, line_sensor_array, imu_sensor)
 
     try:
         channels = list(range(1, 14))
         min_span = 50
-        calibrateline = NEWline_calibration.load_calibration("NEWline_calibration.json", channels, min_span)
+        line_calibration_data = NEWline_calibration.load_calibration("NEWline_calibration.json", channels, min_span)
 
-        task_line.black_values = calibrateline["black"]
-        task_line.white_values = calibrateline["white"]
+        line_sensor_array.black_values = line_calibration_data["black"]
+        line_sensor_array.white_values = line_calibration_data["white"]
          
         print("Loaded line calibration from NEWline_calibration.json.")
-        print("Black_values:", task_line.black_values)
-        print("White_values:", task_line.white_values)
+        print("Black values:", line_sensor_array.black_values)
+        print("White values:", line_sensor_array.white_values)
               
 
     except OSError:
@@ -114,48 +88,51 @@ def main():
         print("Saved line calibration is invalid:", error)
         print("Press C to calibrate.")
         
-    try:
-        imucalibration = NEWimu_calibration.load_calibration("NEWimu_calibration.json")
-        imu.operating_mode_configuration()
-        imu.calibration_profile_write(imucalibration)
-        imu.operating_mode_normal()
+    imu_sensor.operating_mode_configuration()
+    imu_sensor.wait_for_mode()
+    imu_sensor.configure_degree_units()
 
+    try:
+        imu_calibration_data = NEWimu_calibration.load_calibration("NEWimu_calibration.json")
+        imu_sensor.calibration_profile_write(imu_calibration_data)
         print("Saved IMU calibration profile loaded.")
-        NEWimu_calibration.display_calibration_status(imu)
+        NEWimu_calibration.display_calibration_status(imu_sensor)
 
     except OSError:
         print("No saved IMU calibration found. Press I to calibrate.")
 
     except ValueError as error:
         print("Saved IMU calibration is invalid:", error)
-        print("Delete NEWimu_calibration.json and press I to recalibrate.")
+        print("Press I to recalibrate the IMU.")
 
+    imu_sensor.operating_mode_imuplus()
+    imu_sensor.wait_for_mode()
     
     
     # Multitasking setup
     NEWcotask.task_list.append(
-    NEWcotask.Task(outer_controller.run(task_line),
+    NEWcotask.Task(line_controller.run(),
                 name="Line/Outer Control",
                 priority=3,
                 period=20,
                 profile=True))
 
     NEWcotask.task_list.append(
-    NEWcotask.Task(left_task.RunMethod(),
+    NEWcotask.Task(left_motor_task.run(),
                 name="Left Motor Task",
                 priority=2,
                 period=20,
                 profile=True))
 
     NEWcotask.task_list.append(
-    NEWcotask.Task(right_task.RunMethod(),
+    NEWcotask.Task(right_motor_task.run(),
                 name="Right Motor Task",
                 priority=2,
                 period=20,
                 profile=True))
 
     NEWcotask.task_list.append(
-    NEWcotask.Task(task_user.run(),
+    NEWcotask.Task(user_interface.run(),
                 name="User Input Task",
                 priority=0,
                 period=1,
@@ -164,15 +141,18 @@ def main():
 
     try:
         while True:
-         NEWcotask.task_list.pri_sched()
+            NEWcotask.task_list.pri_sched()
 
 
     except KeyboardInterrupt:
         print("KeyboardInterrupt detected. Stopping the motors.")
-        left_motor.set_effort(0)
-        right_motor.set_effort(0)
-        left_motor.disable()
-        right_motor.disable()
+
+    finally:
+        left_motor_driver.set_effort(0)
+        right_motor_driver.set_effort(0)
+        left_motor_driver.disable()
+        right_motor_driver.disable()
+        line_sensor_array.disable_emitters()
         print(NEWcotask.task_list.profile())
         
 

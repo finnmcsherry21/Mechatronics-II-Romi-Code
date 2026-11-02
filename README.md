@@ -4,6 +4,17 @@ MicroPython firmware and a companion PC data-collection script for a Pololu
 Romi differential-drive robot. Firmware module names intentionally retain the
 `NEW` prefix.
 
+## Firmware layout
+
+- `main.py` starts `NEWmain.py` on the STM32.
+- `NEWdrive.py` contains motor driving, encoder measurement, velocity control,
+  and the motor-control task.
+- `NEWlinecontrol.py` contains line sensing, line following, and lane
+  switching.
+- `NEWtaskuser.py` handles PuTTY commands, calibration, and test workflow.
+- `NEWimudriver.py` and the two calibration modules handle the BNO055 in
+  IMUPLUS mode and saved gyro/accelerometer calibration data.
+
 ## Firmware upload
 
 Upload every file in `Python Source Code Files` to the STM32's MicroPython
@@ -18,13 +29,13 @@ following or lane switching.
 
 ## PC data collection
 
-Run `NEWPC_auto_plotter.py` on the computer, not on the STM32. It requires
+Run `PC Tools/NEWPC_auto_plotter.py` on the computer, not on the STM32. It requires
 `pyserial` and `matplotlib`; set `SERIAL_PORT` to the COM port assigned to the
 Romi's USB virtual COM port.
 
-The script sends gains and a velocity setpoint, triggers a left-wheel test,
-then saves a CSV, velocity plot, and voltage plot. Generated files are ignored
-by Git.
+The script sends gains and a velocity setpoint, triggers left- and right-wheel
+tests, then overwrites `latest_left_motor_response.png` and
+`latest_right_motor_response.png`. It does not save CSV files.
 
 ## Desktop checks
 
@@ -41,8 +52,25 @@ physical motor direction, encoder sign, sensor polarity, or final gain tuning.
 ## Calibration files
 
 `NEWline_calibration.json` and `NEWimu_calibration.json` are firmware inputs
-and are intentionally versioned. Recalibrate if the sensor hardware, mounting,
-surface, or lighting changes substantially.
+and are intentionally versioned. The included IMU profile is intentionally
+invalid until you calibrate with `I`; this prevents placeholder data from being
+applied to the BNO055. Recalibrate if the sensor hardware, mounting, surface,
+or lighting changes substantially.
+
+## Lane switching
+
+Start line following with `D`. While following a line, press `S`, then `L` for
+a left lane switch or `R` for a right lane switch. The line-control task uses
+IMU yaw-rate feedback while changing lanes, waits until it has cleared the
+departure line before accepting a target line, and stops both motors if the
+target is missed before the timeout.
+
+## Power behavior
+
+Both motor drivers start disabled and are enabled only for a requested motor
+test, manual drive, or line-following run. QTR emitter controls PB13 and PB14
+start low, are enabled only for line calibration or line following, and are
+forced low on every stop and scheduler exit.
 
 ## Notes
 
