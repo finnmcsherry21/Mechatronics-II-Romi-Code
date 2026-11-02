@@ -48,8 +48,8 @@ class TaskMotor:
         self.finished = False
         self.continuous = continuous
 
+        self.motor.set_effort(0)
         self.motor.enable()
-        #self.motor.set_effort(0)
 
 
     def set_setpoint(self, velocity_setpoint):
@@ -68,64 +68,40 @@ class TaskMotor:
 
 
     def RunMethod(self):
-                
         while True:
             if not self.running:
                 yield
                 continue
-            if self.state == 1:
-                self.encoder.update()
-                self.position = self.encoder.get_position()
-                self.velocity = self.encoder.get_velocity()
-                self.Time = time.ticks_diff(time.ticks_us(), self.start_time) / 1_000_000
+            self.encoder.update()
+            self.position = self.encoder.get_position()
+            self.velocity = self.encoder.get_velocity()
+            self.Time = time.ticks_diff(time.ticks_us(), self.start_time) / 1_000_000
 
-                self.input_voltage = self.controller.update(
-                    self.setpoint,
-                    self.velocity,
-                    self.encoder.dt
-                )
+            self.input_voltage = self.controller.update(
+                self.setpoint,
+                self.velocity,
+                self.encoder.dt
+            )
 
-                # Convert commanded voltage to percent PWM effort.
-                # 7.2 V is the assumed maximum battery/motor voltage.
-                self.effort = 100 * self.input_voltage / 7.2
-                self.motor.set_effort(self.effort)
+            # Convert commanded voltage to percent PWM effort. 7.2 V is the
+            # nominal battery/motor voltage for the six-cell Romi pack.
+            self.effort = 100 * self.input_voltage / 7.2
+            self.motor.set_effort(self.effort)
 
-                self.state = 2
-                
-            elif self.state == 2:
+            if self.i < len(self.data_time):
+                self.data_time[self.i] = self.Time
+                self.data_position[self.i] = self.position
+                self.data_velocity[self.i] = self.velocity
+                self.data_input_voltage[self.i] = self.input_voltage
+                self.data_setpoint[self.i] = self.setpoint
+                self.i += 1
 
-                if self.i < len(self.data_time):
-                    self.data_time[self.i] = self.Time
-                    self.data_position[self.i] = self.position
-                    self.data_velocity[self.i] = self.velocity
-                    self.data_input_voltage[self.i] = self.input_voltage
-                    self.data_setpoint[self.i] = self.setpoint
-                    #self.data_kp[self.i] = self.controller.k_p
-                    #self.data_ki[self.i] = self.controller.k_i
-                    self.i += 1
-
-                if not self.continuous and (self.Time >= self.duration or self.i >= len(self.data_time)):
-                    self.state = 3
-
-                else:
-                    self.state = 1
-
-            elif self.state == 3:
+            if not self.continuous and \
+                    (self.Time >= self.duration or self.i >= len(self.data_time)):
                 self.motor.set_effort(0)
                 self.motor.disable()
                 self.running = False
                 self.finished = True
                 self.state = 1
-                
-                
-            else:
-               # If the state isnt 0, 1, or 2 we have an invalid state
-               raise ValueError('Invalid state')
-           
-            yield self.state
-            
 
-
-        
-
-
+            yield

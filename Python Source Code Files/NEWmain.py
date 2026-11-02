@@ -134,30 +134,23 @@ def main():
     
     # Multitasking setup
     NEWcotask.task_list.append(
-    NEWcotask.Task(task_line.run(outer_controller),
-                name="Line Sensor Task",
+    NEWcotask.Task(outer_controller.run(task_line),
+                name="Line/Outer Control",
                 priority=3,
-                period=20,
-                profile=True))
-
-    NEWcotask.task_list.append(
-    NEWcotask.Task(outer_controller.run(),
-                name="Outer Controller Task",
-                priority=2,
                 period=20,
                 profile=True))
 
     NEWcotask.task_list.append(
     NEWcotask.Task(left_task.RunMethod(),
                 name="Left Motor Task",
-                priority=1,
+                priority=2,
                 period=20,
                 profile=True))
 
     NEWcotask.task_list.append(
     NEWcotask.Task(right_task.RunMethod(),
                 name="Right Motor Task",
-                priority=1,
+                priority=2,
                 period=20,
                 profile=True))
 

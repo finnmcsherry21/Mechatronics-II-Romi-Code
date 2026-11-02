@@ -52,6 +52,12 @@ class OuterController:
         self.y_hat = float(y_hat)
 
 
+    def clear_line_error(self):
+        """Drive straight while waiting to reacquire a lost line."""
+        self.y_hat = 0.0
+        self.line_integral = 0.0
+
+
     def set_lane_setpoints(self, omega_sp_left, omega_sp_right):
         """Set wheel commands owned by an active lane-switch maneuver."""
         self.omega_sp_L = max(-25.0, min(25.0, float(omega_sp_left)))
@@ -136,20 +142,21 @@ class OuterController:
     #     self.omega_sp_R = max(-25.0, min(25.0, self.omega_sp_R))
 
 
-    def run(self):
+    def run(self, task_line):
 
         while True:
-            if self.enabled == True and not self.lane_switching:
-                
+            if self.enabled:
+                task_line.update(self)
+
+            # update() can stop the robot after detecting a transverse black
+            # line, so test enabled again before commanding either motor.
+            if self.enabled and not self.lane_switching:
                 omega_sp_L, omega_sp_R = self.calculate_setpoints()
                 self.left_task.set_setpoint(omega_sp_L)
                 self.right_task.set_setpoint(omega_sp_R)
 
-            if self.enabled == True and self.lane_switching:
+            if self.enabled and self.lane_switching:
                 self.left_task.set_setpoint(self.omega_sp_L)
                 self.right_task.set_setpoint(self.omega_sp_R)
-                
-            # else:
-            #     break
-        
+
             yield

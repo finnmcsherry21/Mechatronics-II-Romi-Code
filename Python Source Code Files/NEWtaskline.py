@@ -148,33 +148,47 @@ class TaskLine:
         return centroid
 
 
-    def run(self, outer_controller): 
+    def update(self, outer_controller):
+        """Sample the line once and update the shared outer controller.
+
+        This is called from the outer-controller task, ensuring that the
+        latest centroid is used in the same 20 ms control cycle. Sampling is
+        skipped while stopped, avoiding needless ADC/DMA work at the command
+        prompt.
+        """
+        if not outer_controller.enabled:
+            return
+
+        sensor_values = self.read_sensors()
+        line_values = self.normalize_sensor_values(sensor_values)
+
+        if line_values is None:
+            outer_controller.clear_line_error()
+            return
+
+        centroid = self.find_centroid(line_values)
+        if centroid is None:
+            outer_controller.clear_line_error()
+            return
+
+        y_hat = centroid - self.center_sensor
+        outer_controller.set_line_error(y_hat)
+
+        if self.line_data_running and self.line_data_i < len(self.line_data_time):
+            line_time = time.ticks_diff(time.ticks_us(), self.line_start_time) / 1_000_000
+            self.line_data_time[self.line_data_i] = line_time
+            self.line_data_centroid[self.line_data_i] = centroid
+            self.line_data_y_hat[self.line_data_i] = y_hat
+            self.line_data_i += 1
+
+        if all(value > 0.25 for value in line_values):
+            print("Solid black detected. Stopping motors.")
+            outer_controller.stop()
+            self.stop_data_collection()
+
+
+    def run(self, outer_controller):
+        """Compatibility generator for standalone sensor-task experiments."""
         while True:
-            sensor_values = self.read_sensors()
-            line_values = self.normalize_sensor_values(sensor_values)
-
-            if line_values is not None:
-                centroid = self.find_centroid(line_values)
-
-                if centroid is not None:
-                    y_hat = centroid - self.center_sensor
-                    outer_controller.set_line_error(y_hat)
-
-                    if (self.line_data_running and self.line_data_i < len(self.line_data_time)):
-                        
-                        line_time = time.ticks_diff(time.ticks_us(), self.line_start_time) / 1_000_000
-
-                        self.line_data_time[self.line_data_i] = line_time
-                        self.line_data_centroid[self.line_data_i] = centroid
-                        self.line_data_y_hat[self.line_data_i] = y_hat
-
-                        self.line_data_i += 1
-                        
-                    if (outer_controller.enabled and all(value > 0.25 for value in line_values)):
-                        print("Solid black detected. Stopping motors.")
-                        outer_controller.stop()
-                        self.stop_data_collection()
-
-        
-
+            self.update(outer_controller)
             yield
