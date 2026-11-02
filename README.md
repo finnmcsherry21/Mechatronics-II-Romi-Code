@@ -26,6 +26,18 @@ The script sends gains and a velocity setpoint, triggers a left-wheel test,
 then saves a CSV, velocity plot, and voltage plot. Generated files are ignored
 by Git.
 
+## Desktop checks
+
+After installing the PC requirements, run this from the repository root:
+
+```powershell
+python -B -m unittest discover -s tests
+```
+
+These tests validate control math, calibration validation, and lane-switch
+fail-safe behavior without connecting the Romi. They cannot validate the
+physical motor direction, encoder sign, sensor polarity, or final gain tuning.
+
 ## Calibration files
 
 `NEWline_calibration.json` and `NEWimu_calibration.json` are firmware inputs

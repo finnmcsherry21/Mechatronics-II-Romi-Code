@@ -45,10 +45,22 @@ class OuterController:
 
         self.kp_line = kp_line
         self.ki_line = ki_line
+        self.line_integral = 0.0
 
 
     def set_line_error(self, y_hat):
         self.y_hat = float(y_hat)
+
+
+    def set_lane_setpoints(self, omega_sp_left, omega_sp_right):
+        """Set wheel commands owned by an active lane-switch maneuver."""
+        self.omega_sp_L = max(-25.0, min(25.0, float(omega_sp_left)))
+        self.omega_sp_R = max(-25.0, min(25.0, float(omega_sp_right)))
+
+
+    def clear_lane_setpoints(self):
+        self.omega_sp_L = self.velocity_setpoint
+        self.omega_sp_R = self.velocity_setpoint
 
 
     def enable(self, velocity_setpoint):
@@ -74,6 +86,8 @@ class OuterController:
         
     def stop(self):
         self.disable()
+        self.lane_switching = False
+        self.clear_lane_setpoints()
 
         self.left_task.stop()
         self.right_task.stop()

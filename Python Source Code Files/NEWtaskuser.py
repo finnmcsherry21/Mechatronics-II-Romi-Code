@@ -53,6 +53,7 @@ class TaskUser:
         self.lane_switch.lane_switching_enabled = False
         self.m_pattern_step = 0
         self.m_pattern_start_time = 0
+        self.next_imu_status_time = 0
         
         
         
@@ -67,7 +68,7 @@ class TaskUser:
         print("| m/M | Enter manual driving mode with W, A, S, D controls                     |")
         print("| r/R | Trigger step response sequence on right motor and print results        |")
         print("| k/K | Enter the proportional and integral gains for closed-loop control      |")
-        print("| d/D | Drive both wheels at the same time                                     |")
+        print("| d/D | Start line following                                                   |")
         print("| c/C | Calibrate the line sensors                                             |")
         print("| e/E | Exit program                                                           |")
         print("+-----+------------------------------------------------------------------------+")
@@ -174,6 +175,7 @@ class TaskUser:
                         
                         print("Starting IMU calibration.")
                         self.last_imu_calibration = None
+                        self.next_imu_status_time = time.ticks_ms()
                         self.state = 7
                         
                     elif char_in in {"D", "d"}:
@@ -485,12 +487,12 @@ class TaskUser:
                 gyro = (status >> 4) & 0x03
                 accel = (status >> 2) & 0x03
                 mag = status & 0x03
-                    
-                print("Current IMU calibration status:")
-                print("System: {}/3".format(system))
-                print("Gyro: {}/3".format(gyro))
-                print("Acceleration: {}/3".format(accel))
-                print("Magnetometer: {}/3".format(mag))
+
+                now = time.ticks_ms()
+                if time.ticks_diff(now, self.next_imu_status_time) >= 0:
+                    self.next_imu_status_time = time.ticks_add(now, 500)
+                    print("Current IMU calibration status: SYS:{}/3 G:{}/3 A:{}/3 M:{}/3".format(
+                        system, gyro, accel, mag))
                 
 
                 if system == 3 and gyro == 3 and accel == 3 and mag == 3:
@@ -504,16 +506,18 @@ class TaskUser:
                     self.state = 1
                     
             if self.state == 8:
-                if self.lane_switch.lane_switching_enabled == True:
+                if self.lane_switch.lane_switching_enabled:
                     self.lane_switch.run()
+
+                if not self.outer_controller.enabled and not self.lane_switch.lane_switching_enabled:
+                    print("Line following stopped. Returning to the command menu.")
+                    self.state = 1
                  
                 if ser.any():
                     
                     char_in_s = ser.read(1).decode()
                     if char_in_s in {"S", "s"}:
-                        self.lane_switch.lane_switching_enabled = True
                         self.lane_switch.enable_lane_switching()
-                        print("Lane switching now from S state.")
                         
                                            
                     

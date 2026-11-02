@@ -22,18 +22,18 @@ def display_calibration_status(imu):
 
 
 def validate_calibration(calibration):
-    # Ensure the calibration data is 22 bytes long and contains valid values for each channel.
-    if len(calibration) != 22:
+    # The BNO055 calibration profile is exactly 22 unsigned bytes.
+    if not isinstance(calibration, (list, tuple, bytearray)) or len(calibration) != 22:
         raise ValueError("Calibration data must be 22 bytes long")
-    print("Calibration data is 22 bytes long.")  
+    for value in calibration:
+        if not isinstance(value, int) or not 0 <= value <= 255:
+            raise ValueError("Calibration data must contain unsigned bytes")
     return calibration
 
 
 def save_calibration(filename, calibration):
     calibration = list(calibration)
     validate_calibration(calibration)
-    print("Theoretically, calibration data is valid and will be saved to {}.".format(filename))
-
     with open(filename, "w") as file:
         json.dump(calibration, file)
 

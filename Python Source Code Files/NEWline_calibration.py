@@ -14,17 +14,24 @@ import json
 
 
 def validate_calibration(calibration, channels, min_span, adc_max=4095):
-    white, black = calibration["white"], calibration["black"]
+    try:
+        white, black = calibration["white"], calibration["black"]
+        saved_channels = calibration["channels"]
+    except (KeyError, TypeError) as error:
+        raise ValueError("Calibration is missing required channel data") from error
     
-    if len(channels) != 13 or list(calibration["channels"]) != list(channels):
+    if len(channels) != 13 or list(saved_channels) != list(channels):
         raise ValueError("Calibration must match all 13 configured channels")
     
     if len(white) != 13 or len(black) != 13 or not 0 < min_span <= adc_max:
         raise ValueError("Invalid calibration lengths or minimum span")
     
-    for w, b in zip(white, black):
-        if not 0 <= w < b <= adc_max or b - w < min_span:
-            raise ValueError("Invalid black/white values or insufficient contrast")
+    try:
+        for w, b in zip(white, black):
+            if not 0 <= w < b <= adc_max or b - w < min_span:
+                raise ValueError("Invalid black/white values or insufficient contrast")
+    except TypeError as error:
+        raise ValueError("Calibration values must be numeric") from error
         
     return calibration
 

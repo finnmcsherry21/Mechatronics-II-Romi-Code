@@ -20,6 +20,7 @@ class TaskMotor:
             #self.data_ki = data_ki
 
             self.effort = 0
+            self.input_voltage = 0.0
             self.running = False
             self.finished = False
             self.state = 1
