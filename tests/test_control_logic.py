@@ -21,8 +21,7 @@ class FakePyb:
     Pin = object
     Timer = object
 
-    @staticmethod
-    def USB_VCP():
+    def USB_VCP(self):
         return FakeSerial()
 
 
@@ -30,8 +29,7 @@ sys.modules["pyb"] = FakePyb()
 
 
 class FakeMicroPython:
-    @staticmethod
-    def const(value):
+    def const(self, value):
         return value
 
 
@@ -61,8 +59,7 @@ class FakeTime:
     def ticks_ms(self):
         return self.milliseconds
 
-    @staticmethod
-    def ticks_diff(new, old):
+    def ticks_diff(self, new, old):
         return new - old
 
 
@@ -77,12 +74,10 @@ class FakeWheelEncoder:
     def zero(self):
         self.update_count = 0
 
-    @staticmethod
-    def get_position():
+    def get_position(self):
         return 0.0
 
-    @staticmethod
-    def get_velocity():
+    def get_velocity(self):
         return 0.0
 
 
@@ -132,13 +127,13 @@ class FakeLineController:
 class FakeImu:
     def __init__(self):
         self.heading = 0.0
+        self.current_yaw_rate = 0.0
 
     def euler(self):
         return self.heading, 0.0, 0.0
 
-    @staticmethod
-    def yaw_rate():
-        return 0.0
+    def yaw_rate(self):
+        return self.current_yaw_rate
 
 
 class FakeI2c:
@@ -167,6 +162,10 @@ class VelocityControllerTests(unittest.TestCase):
         self.module = load_module("NEWdrive")
 
     def test_output_is_bounded(self):
+        controller = self.module.VelocityController(2.0, 1.0)
+        self.assertEqual(controller.update(1.0, 0.0, 0.5), 2.5)
+        self.assertEqual(controller.update(1.0, 0.0, 0.5), 3.0)
+
         controller = self.module.VelocityController(10.0, 10.0)
         self.assertEqual(controller.update(100.0, 0.0, 1.0), 7.2)
         self.assertEqual(controller.update(-100.0, 0.0, 1.0), -7.2)
@@ -182,6 +181,23 @@ class CalibrationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             module.validate_calibration({}, list(range(1, 14)), 50)
 
+        channels = list(range(1, 14))
+        calibration = {
+            "channels": channels,
+            "black": [1000] * 13,
+            "white": [100] * 13
+        }
+
+        filename = os.path.join(PROJECT_ROOT, "tests", "line_calibration_test.json")
+        try:
+            module.save_calibration(filename, calibration, channels, 50)
+            loaded_calibration = module.load_calibration(filename, channels, 50)
+        finally:
+            if os.path.exists(filename):
+                os.remove(filename)
+
+        self.assertEqual(loaded_calibration, calibration)
+
     def test_imu_calibration_requires_bytes(self):
         module = load_module("NEWimu_calibration")
         with self.assertRaises(ValueError):
@@ -190,6 +206,17 @@ class CalibrationTests(unittest.TestCase):
             module.validate_calibration([256] * 22)
         with self.assertRaises(ValueError):
             module.validate_calibration([0] * 22)
+
+        profile = list(range(1, 23))
+        filename = os.path.join(PROJECT_ROOT, "tests", "imu_calibration_test.json")
+        try:
+            module.save_calibration(filename, profile)
+            loaded_profile = module.load_calibration(filename)
+        finally:
+            if os.path.exists(filename):
+                os.remove(filename)
+
+        self.assertEqual(loaded_profile, profile)
 
 
 class ImuDriverTests(unittest.TestCase):
@@ -221,11 +248,22 @@ class LaneSwitchTests(unittest.TestCase):
 
     def test_lane_switch_captures_target_after_clearing_departure_line(self):
         self.assertTrue(self.lane_switch.start(1))
-        line_sensor_array = FakeLineSensorArray([False, True])
+        line_sensor_array = FakeLineSensorArray([False, True, True, True])
         self.clock.advance(20)
         self.lane_switch.update(line_sensor_array)
         self.assertTrue(self.line_controller.lane_switch_active)
         self.assertIsNotNone(self.line_controller.setpoints)
+        self.assertLess(self.line_controller.setpoints[0], 7.5)
+        self.assertGreater(self.line_controller.setpoints[1], 7.5)
+
+        self.lane_switch.lateral_position = 0.10
+        self.clock.advance(20)
+        self.lane_switch.update(line_sensor_array)
+        self.assertTrue(self.line_controller.lane_switch_active)
+
+        self.clock.advance(20)
+        self.lane_switch.update(line_sensor_array)
+        self.assertTrue(self.line_controller.lane_switch_active)
 
         self.clock.advance(20)
         self.lane_switch.update(line_sensor_array)
@@ -291,14 +329,19 @@ class MotorControlTaskTests(unittest.TestCase):
             FakeMotorTask()
         )
         line_controller.set_velocity_setpoint(8.0)
-        line_controller.set_gains(0.5, 0.1)
+        line_controller.set_gains(0.1, 0.5)
         line_controller.previous_time = clock.ticks_us()
 
         line_controller.set_line_error(1.0)
         clock.advance(20)
         line_controller.update_setpoints()
-        self.assertLess(line_controller.left_velocity_setpoint, 8.0)
+        first_left_setpoint = line_controller.left_velocity_setpoint
+        self.assertLess(first_left_setpoint, 8.0)
         self.assertGreater(line_controller.right_velocity_setpoint, 8.0)
+
+        clock.advance(20)
+        line_controller.update_setpoints()
+        self.assertLess(line_controller.left_velocity_setpoint, first_left_setpoint)
 
         line_controller.set_line_error(-1.0)
         clock.advance(20)

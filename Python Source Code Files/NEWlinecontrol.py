@@ -320,6 +320,7 @@ class LaneSwitchController:
         self.active = False
         self.state = 0
         self.clear_of_departure_line = False
+        self.target_line_count = 0
         self.initial_heading = 0.0
         self.relative_heading = 0.0
         self.lateral_position = 0.0
@@ -338,6 +339,7 @@ class LaneSwitchController:
         self.state = self.DEPARTURE
         self.turn_direction = 1 if turn_direction >= 0 else -1
         self.clear_of_departure_line = False
+        self.target_line_count = 0
         self.initial_heading, _, _ = self.imu_sensor.euler()
         self.relative_heading = 0.0
         self.lateral_position = 0.0
@@ -401,7 +403,12 @@ class LaneSwitchController:
             self.update_setpoints(-self.turn_direction * self.departure_yaw_rate)
 
             if self.clear_of_departure_line and line_sensor_array.line_detected():
-                self.stop("target line captured")
+                if abs(self.lateral_position) >= self.lane_width / 2:
+                    self.target_line_count += 1
+                    if self.target_line_count >= 3:
+                        self.stop("target line captured")
+            else:
+                self.target_line_count = 0
 
         if self.active and \
                 time.ticks_diff(time.ticks_ms(), self.start_time) >= self.timeout_ms:

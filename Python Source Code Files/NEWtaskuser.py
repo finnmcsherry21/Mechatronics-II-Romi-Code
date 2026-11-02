@@ -19,6 +19,8 @@ class TaskUser:
     IMU_CALIBRATION = 8
     LINE_FOLLOWING = 9
     LANE_DIRECTION = 10
+    MOTOR_DATA = 11
+    LINE_DATA = 12
 
     def __init__(self, left_motor_task, right_motor_task, line_controller,
                  line_sensor_array, imu_sensor):
@@ -39,7 +41,10 @@ class TaskUser:
         self.manual_speed = 7.5
         self.next_imu_status_time = 0
         self.number_buffer = []
+        self.number_invalid = False
         self.gain_step = 0
+        self.output_motor_task = None
+        self.print_index = -1
 
         self.print_help()
 
@@ -60,9 +65,12 @@ class TaskUser:
         print("+-----+------------------------------------------------------------------------+")
 
     def print_data(self, motor_task):
-        print("Time(s), Position(rad), Velocity(rad/s), Input Voltage(V), Setpoint(rad/s)")
+        if self.print_index == -1:
+            print("Time(s), Position(rad), Velocity(rad/s), Input Voltage(V), Setpoint(rad/s)")
+            self.print_index = 0
 
-        for index in range(motor_task.sample_index):
+        elif self.print_index < motor_task.sample_index:
+            index = self.print_index
             print("{},{},{},{},{}".format(
                 motor_task.log_time[index],
                 motor_task.log_position[index],
@@ -70,20 +78,33 @@ class TaskUser:
                 motor_task.log_voltage[index],
                 motor_task.log_setpoint[index]
             ))
+            self.print_index += 1
 
-        print("End of data")
+        else:
+            print("End of data")
+            return True
+
+        return False
 
     def print_line_data(self):
-        print("Time(s), Centroid, Y_hat")
+        if self.print_index == -1:
+            print("Time(s), Centroid, Y_hat")
+            self.print_index = 0
 
-        for index in range(self.line_sensor_array.log_index):
+        elif self.print_index < self.line_sensor_array.log_index:
+            index = self.print_index
             print("{},{},{}".format(
                 self.line_sensor_array.log_time[index],
                 self.line_sensor_array.log_centroid[index],
                 self.line_sensor_array.log_line_error[index]
             ))
+            self.print_index += 1
 
-        print("End of line data")
+        else:
+            print("End of line data")
+            return True
+
+        return False
 
     def read_command(self):
         if not ser.any():
@@ -96,6 +117,7 @@ class TaskUser:
 
     def start_number_input(self):
         self.number_buffer = []
+        self.number_invalid = False
 
     def read_number(self):
         if not ser.any():
@@ -104,38 +126,56 @@ class TaskUser:
         char_in = ser.read(1).decode()
 
         if char_in in "0123456789":
-            ser.write(char_in)
-            self.number_buffer.append(char_in)
+            if self.number_buffer == ["0"] or \
+                    self.number_buffer == ["-", "0"]:
+                print("Leading zeros are not allowed. Use 0 or 0.xxx.")
+                self.number_invalid = True
+            else:
+                ser.write(char_in)
+                self.number_buffer.append(char_in)
 
         elif char_in == "-" and len(self.number_buffer) == 0:
             ser.write(char_in)
             self.number_buffer.append(char_in)
 
-        elif char_in == "." and "." not in self.number_buffer:
-            ser.write(char_in)
-            self.number_buffer.append(char_in)
+        elif char_in == ".":
+            if len(self.number_buffer) == 0 or self.number_buffer == ["-"]:
+                print("Enter a zero before the decimal point.")
+                self.number_invalid = True
+            elif "." in self.number_buffer:
+                print("Only one decimal point is allowed.")
+                self.number_invalid = True
+            else:
+                ser.write(char_in)
+                self.number_buffer.append(char_in)
 
         elif char_in == "\x7f" and len(self.number_buffer) > 0:
             ser.write(char_in)
             self.number_buffer.pop()
+            self.number_invalid = False
 
         elif char_in in {"\r", "\n"}:
             ser.write("\r\n")
 
-            if len(self.number_buffer) == 0:
+            if len(self.number_buffer) == 0 and not self.number_invalid:
                 return "cancel"
 
-            if self.number_buffer in (["-"], ["."], ["-", "."]):
-                print("Enter a valid number or press Enter to cancel.")
+            if self.number_invalid or \
+                    self.number_buffer == ["-"] or \
+                    self.number_buffer[-1] == ".":
+                print("Enter a valid signed number or press Enter to cancel.")
                 self.number_buffer = []
+                self.number_invalid = False
                 return None
 
             number = float("".join(self.number_buffer))
             self.number_buffer = []
+            self.number_invalid = False
             return number
 
         else:
-            print("Use numbers, -, ., Backspace, or Enter.")
+            print("Use numbers, one leading -, one decimal point, Backspace, or Enter.")
+            self.number_invalid = True
 
         return None
 
@@ -279,7 +319,8 @@ class TaskUser:
         elif command == "e":
             self.stop_driving()
             print("Driving stopped.")
-            self.print_line_data()
+            self.print_index = -1
+            self.state = TaskUser.LINE_DATA
 
         else:
             print("Unknown command. Type H for the help menu.")
@@ -417,8 +458,8 @@ class TaskUser:
         elif command == "e":
             self.stop_driving()
             print("Driving stopped.")
-            self.print_line_data()
-            self.state = TaskUser.MENU
+            self.print_index = -1
+            self.state = TaskUser.LINE_DATA
 
         elif command is not None:
             print("Use S to lane switch or E to stop line following.")
@@ -452,15 +493,39 @@ class TaskUser:
                 self.update_menu()
 
             elif self.state == TaskUser.LEFT_TEST:
-                if self.left_motor_task.finished:
+                command = self.read_command()
+                if command == "e":
+                    self.left_motor_task.stop()
+                    print("Left motor test stopped.")
+                    self.output_motor_task = self.left_motor_task
+                    self.print_index = -1
+                    self.state = TaskUser.MOTOR_DATA
+                elif self.left_motor_task.finished:
                     print("Left motor test complete.")
-                    self.print_data(self.left_motor_task)
-                    self.state = TaskUser.MENU
+                    self.output_motor_task = self.left_motor_task
+                    self.print_index = -1
+                    self.state = TaskUser.MOTOR_DATA
 
             elif self.state == TaskUser.RIGHT_TEST:
-                if self.right_motor_task.finished:
+                command = self.read_command()
+                if command == "e":
+                    self.right_motor_task.stop()
+                    print("Right motor test stopped.")
+                    self.output_motor_task = self.right_motor_task
+                    self.print_index = -1
+                    self.state = TaskUser.MOTOR_DATA
+                elif self.right_motor_task.finished:
                     print("Right motor test complete.")
-                    self.print_data(self.right_motor_task)
+                    self.output_motor_task = self.right_motor_task
+                    self.print_index = -1
+                    self.state = TaskUser.MOTOR_DATA
+
+            elif self.state == TaskUser.MOTOR_DATA:
+                if self.print_data(self.output_motor_task):
+                    self.state = TaskUser.MENU
+
+            elif self.state == TaskUser.LINE_DATA:
+                if self.print_line_data():
                     self.state = TaskUser.MENU
 
             elif self.state == TaskUser.SETPOINT:

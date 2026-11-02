@@ -208,10 +208,11 @@ class Task:
         # If this task uses a timer, check if it's time to run run() again. If
         # so, set go flag and set the timer to go off at the next run time
         if self.period is not None:
-            late = utime.ticks_diff(utime.ticks_us(), self._next_run)
+            current_time = utime.ticks_us()
+            late = utime.ticks_diff(current_time, self._next_run)
             if late >= 0:
                 self.go_flag = True
-                self._next_run = utime.ticks_add(self._next_run, self.period)
+                self._next_run = utime.ticks_add(current_time, self.period)
 
                 # If keeping a latency profile, record the data
                 if self._prof:

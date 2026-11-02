@@ -1,4 +1,12 @@
 
+"""
+Push changes to GitHub from the project folder:
+
+git add .
+git commit -m "Describe your changes"
+git push origin main
+"""
+
 from pyb import Pin, Timer, I2C
 import NEWimu_calibration
 
@@ -14,8 +22,8 @@ from NEWlinecontrol import LineSensorArray, LineController
 
 # ----- Motor setup -----
 pwm_timer = Timer(1, freq=20_000)
-left_motor_driver = MotorDriver(Pin.cpu.A8, Pin.cpu.B7, Pin.cpu.B6, pwm_timer, 1)
-right_motor_driver = MotorDriver(Pin.cpu.A9, Pin.cpu.B2, Pin.cpu.A10, pwm_timer, 2)
+left_motor_driver = MotorDriver(Pin.cpu.A8, Pin.cpu.B7, Pin.cpu.B6, pwm_timer, 1, -1)
+right_motor_driver = MotorDriver(Pin.cpu.A9, Pin.cpu.B2, Pin.cpu.A10, pwm_timer, 2, 1)
 
 
 # ----- Encoder hardware setup -----
@@ -37,7 +45,7 @@ if chip_id != 0xA0:
 
 
 def main():
-    
+
     left_wheel_encoder = WheelEncoder(left_encoder_timer, direction=-1)
     right_wheel_encoder = WheelEncoder(right_encoder_timer, direction=-1)
 
@@ -48,6 +56,7 @@ def main():
     left_log_time = array.array('f', [0] * size)
     left_log_voltage = array.array('f', [0] * size)
     left_log_setpoint = array.array('f', [0] * size)
+
     right_log_position = array.array('f', [0] * size)
     right_log_velocity = array.array('f', [0] * size)
     right_log_time = array.array('f', [0] * size)
@@ -60,12 +69,7 @@ def main():
     left_motor_task = MotorControlTask(left_motor_driver, left_wheel_encoder, left_log_time, left_log_position, left_log_velocity, left_log_voltage, left_log_setpoint)
     right_motor_task = MotorControlTask(right_motor_driver, right_wheel_encoder, right_log_time, right_log_position, right_log_velocity, right_log_voltage, right_log_setpoint)
     line_sensor_array = LineSensorArray()
-    line_controller = LineController(
-        left_motor_task,
-        right_motor_task,
-        line_sensor_array,
-        imu_sensor
-    )
+    line_controller = LineController(left_motor_task, right_motor_task, line_sensor_array, imu_sensor)
     user_interface = NEWtaskuser.TaskUser(left_motor_task, right_motor_task, line_controller, line_sensor_array, imu_sensor)
 
     try:

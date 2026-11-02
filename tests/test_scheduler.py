@@ -21,19 +21,16 @@ class FakeClock:
     def ticks_us(self):
         return self.microseconds
 
-    @staticmethod
-    def ticks_add(value, offset):
+    def ticks_add(self, value, offset):
         return value + offset
 
-    @staticmethod
-    def ticks_diff(new, old):
+    def ticks_diff(self, new, old):
         return new - old
 
 
 class FakeMicroPython:
 
-    @staticmethod
-    def native(function):
+    def native(self, function):
         return function
 
 
@@ -89,6 +86,14 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(events.count("line"), 5)
         self.assertEqual(events.count("motor"), 5)
         self.assertEqual(events.count("user"), 5)
+
+        self.clock.advance(100)
+        for _ in range(3):
+            task_list.pri_sched()
+
+        self.assertEqual(events.count("line"), 6)
+        self.assertEqual(events.count("motor"), 6)
+        self.assertEqual(events.count("user"), 6)
 
 
 if __name__ == "__main__":

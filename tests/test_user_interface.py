@@ -56,8 +56,7 @@ class FakePyb:
     Pin = FakePin
     Timer = object
 
-    @staticmethod
-    def USB_VCP():
+    def USB_VCP(self):
         return FakeSerial()
 
 
@@ -72,19 +71,16 @@ class FakeTime:
     def ticks_us(self):
         return self.milliseconds * 1000
 
-    @staticmethod
-    def ticks_diff(new, old):
+    def ticks_diff(self, new, old):
         return new - old
 
-    @staticmethod
-    def ticks_add(value, offset):
+    def ticks_add(self, value, offset):
         return value + offset
 
 
 class FakeWheelEncoder:
 
-    @staticmethod
-    def get_velocity():
+    def get_velocity(self):
         return 0.0
 
 
@@ -224,8 +220,7 @@ class FakeImu:
     def calibration_profile_read(self):
         return self.saved_profile
 
-    @staticmethod
-    def euler():
+    def euler(self):
         return 0.0, 0.0, 0.0
 
 
@@ -314,13 +309,34 @@ class UserInterfaceTests(unittest.TestCase):
         self.assertEqual(self.right_motor_task.gains[-1], (1.0, 0.1))
         self.assertEqual(self.line_controller.gains[-1], (0.5, 0.05))
 
+        self.press("v")
+        self.enter_number("5..57")
+        self.assertEqual(self.user_interface.state, self.user_module.TaskUser.SETPOINT)
+        self.assertEqual(self.user_interface.value, 8.0)
+
+        self.enter_number("4.02.4")
+        self.assertEqual(self.user_interface.state, self.user_module.TaskUser.SETPOINT)
+        self.assertEqual(self.user_interface.value, 8.0)
+
+        self.enter_number("056")
+        self.assertEqual(self.user_interface.state, self.user_module.TaskUser.SETPOINT)
+        self.assertEqual(self.user_interface.value, 8.0)
+
+        self.enter_number("0.56")
+        self.assertEqual(self.user_interface.state, self.user_module.TaskUser.MENU)
+        self.assertEqual(self.user_interface.value, 0.56)
+
     def test_motor_tests_and_calibration_commands_return_to_menu(self):
         self.enter_ready_motion_values()
 
         self.press("l")
         self.assertEqual(self.user_interface.state, self.user_module.TaskUser.LEFT_TEST)
         self.assertEqual(self.left_motor_task.started[-1], (8.0, False))
-        self.left_motor_task.finished = True
+        stop_count = self.left_motor_task.stopped
+        self.press("e")
+        self.assertEqual(self.left_motor_task.stopped, stop_count + 1)
+        self.assertEqual(self.user_interface.state, self.user_module.TaskUser.MOTOR_DATA)
+        next(self.runner)
         next(self.runner)
         self.assertEqual(self.user_interface.state, self.user_module.TaskUser.MENU)
 
@@ -328,6 +344,9 @@ class UserInterfaceTests(unittest.TestCase):
         self.assertEqual(self.user_interface.state, self.user_module.TaskUser.RIGHT_TEST)
         self.assertEqual(self.right_motor_task.started[-1], (8.0, False))
         self.right_motor_task.finished = True
+        next(self.runner)
+        self.assertEqual(self.user_interface.state, self.user_module.TaskUser.MOTOR_DATA)
+        next(self.runner)
         next(self.runner)
         self.assertEqual(self.user_interface.state, self.user_module.TaskUser.MENU)
 
@@ -375,6 +394,9 @@ class UserInterfaceTests(unittest.TestCase):
         self.assertEqual(self.line_controller.lane_switch_directions, [1])
         self.assertTrue(self.line_controller.lane_switch_active)
         self.press("e")
+        self.assertEqual(self.user_interface.state, self.user_module.TaskUser.LINE_DATA)
+        next(self.runner)
+        next(self.runner)
         self.assertEqual(self.user_interface.state, self.user_module.TaskUser.MENU)
         self.assertFalse(self.line_controller.enabled)
         self.assertFalse(self.line_sensor_array.logging)

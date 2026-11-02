@@ -5,15 +5,12 @@ import time
 
 class MotorDriver:
 
-    def __init__(self, pwm_pin, direction_pin, sleep_pin, timer, channel):
+    def __init__(self, pwm_pin, direction_pin, sleep_pin, timer, channel,
+                 direction=1):
         self.direction_pin = Pin(direction_pin, mode=Pin.OUT_PP)
         self.sleep_pin = Pin(sleep_pin, mode=Pin.OUT_PP)
-        self.pwm_channel = timer.channel(
-            channel,
-            pin=pwm_pin,
-            mode=Timer.PWM,
-            pulse_width_percent=0
-        )
+        self.pwm_channel = timer.channel(channel, pin=pwm_pin, mode=Timer.PWM, pulse_width_percent=0)
+        self.direction = direction
         self.disable()
 
     def enable(self):
@@ -23,6 +20,7 @@ class MotorDriver:
         self.sleep_pin.low()
 
     def set_effort(self, effort):
+        effort = self.direction * effort
         effort = max(-100, min(100, effort))
 
         if effort < 0:
@@ -134,8 +132,7 @@ class VelocityController:
 
 class MotorControlTask:
 
-    def __init__(self, motor_driver, wheel_encoder, log_time, log_position,
-                 log_velocity, log_voltage, log_setpoint):
+    def __init__(self, motor_driver, wheel_encoder, log_time, log_position, log_velocity, log_voltage, log_setpoint):
         self.motor_driver = motor_driver
         self.wheel_encoder = wheel_encoder
         self.log_time = log_time
