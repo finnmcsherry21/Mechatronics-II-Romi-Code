@@ -1,5 +1,25 @@
 """Desktop tests for control logic that does not require the STM32."""
 
+# Run all 16 tests from the project folder:
+# python -B -m unittest discover -s tests
+#
+# 1. test_output_is_bounded
+# 2. test_rejects_negative_gains
+# 3. test_line_calibration_rejects_missing_keys
+# 4. test_imu_calibration_requires_bytes
+# 5. test_imuplus_mode_and_yaw_rate_use_expected_units
+# 6. test_lane_switch_captures_target_after_clearing_departure_line
+# 7. test_lane_switch_times_out_safely
+# 8. test_control_and_logging_happen_each_scheduled_pass
+# 9. test_motor_and_line_setpoints_are_limited
+# 10. test_priority_scheduler_runs_ready_tasks_highest_priority_first
+# 11. test_periodic_tasks_run_once_per_due_period
+# 12. test_motion_commands_require_their_setup_values
+# 13. test_help_setpoint_and_gains_flow
+# 14. test_motor_tests_and_calibration_commands_return_to_menu
+# 15. test_imu_line_following_lane_switch_and_manual_commands
+# 16. test_completed_imu_calibration_saves_and_restores_normal_mode
+
 import importlib.util
 import os
 import sys

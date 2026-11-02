@@ -5,6 +5,11 @@ Push changes to GitHub from the project folder:
 git add .
 git commit -m "Describe your changes"
 git push origin main
+
+
+Run the test code in the project folder:
+
+
 """
 
 from pyb import Pin, Timer, I2C
