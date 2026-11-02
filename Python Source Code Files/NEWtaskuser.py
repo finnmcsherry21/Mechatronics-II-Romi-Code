@@ -21,6 +21,7 @@ class TaskUser:
     LANE_DIRECTION = 10
     MOTOR_DATA = 11
     LINE_DATA = 12
+    IMU_VIEWER = 13
 
     def __init__(self, left_motor_task, right_motor_task, line_controller,
                  line_sensor_array, imu_sensor):
@@ -40,6 +41,7 @@ class TaskUser:
         self.gains_entered = False
         self.manual_speed = 7.5
         self.next_imu_status_time = 0
+        self.next_imu_viewer_time = 0
         self.number_buffer = []
         self.number_invalid = False
         self.gain_step = 0
@@ -57,6 +59,7 @@ class TaskUser:
         print("| r/R | Run right motor test                                                   |")
         print("| c/C | Calibrate line sensors                                                 |")
         print("| i/I | Calibrate IMU                                                          |")
+        print("| t/T | Stream IMU orientation to the 3D PC viewer                            |")
         print("| d/D | Start line following                                                   |")
         print("| m/M | Start manual driving                                                   |")
         print("| e/E | Stop driving and return to menu                                        |")
@@ -282,6 +285,12 @@ class TaskUser:
         print("Press W to save after the IMU is calibrated, or E to cancel.")
         self.state = TaskUser.IMU_CALIBRATION
 
+    def start_imu_viewer(self):
+        self.stop_driving()
+        self.next_imu_viewer_time = time.ticks_ms()
+        print("Streaming IMU orientation for the PC 3D viewer. Press E to stop.")
+        self.state = TaskUser.IMU_VIEWER
+
     def update_menu(self):
         command = self.read_command()
 
@@ -314,6 +323,9 @@ class TaskUser:
 
         elif command == "i":
             self.start_imu_calibration()
+
+        elif command == "t":
+            self.start_imu_viewer()
 
         elif command == "d":
             self.start_line_following()
@@ -457,6 +469,20 @@ class TaskUser:
         elif command is not None:
             print("Press W to save after the IMU is 3/3, or E to cancel.")
 
+    def update_imu_viewer(self):
+        command = self.read_command()
+
+        if command == "e":
+            print("IMU orientation streaming stopped.")
+            self.state = TaskUser.MENU
+            return
+
+        now = time.ticks_ms()
+        if time.ticks_diff(now, self.next_imu_viewer_time) >= 0:
+            self.next_imu_viewer_time = time.ticks_add(now, 50)
+            heading, roll, pitch = self.imu_sensor.euler()
+            print("IMU,{},{},{}".format(heading, roll, pitch))
+
     def update_line_following(self):
         if not self.line_controller.enabled:
             print("Line following stopped. Returning to the command menu.")
@@ -556,6 +582,9 @@ class TaskUser:
 
             elif self.state == TaskUser.IMU_CALIBRATION:
                 self.update_imu_calibration()
+
+            elif self.state == TaskUser.IMU_VIEWER:
+                self.update_imu_viewer()
 
             elif self.state == TaskUser.LINE_FOLLOWING:
                 self.update_line_following()

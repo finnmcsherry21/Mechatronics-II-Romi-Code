@@ -1,3 +1,4 @@
 # Dependencies for the computer-side NEWPC_auto_plotter.py script only.
 matplotlib
 pyserial
+vpython

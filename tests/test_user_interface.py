@@ -207,6 +207,7 @@ class FakeImu:
         self.imuplus_calls = 0
         self.status = 0
         self.saved_profile = bytes(range(22))
+        self.euler_calls = 0
 
     def operating_mode_configuration(self):
         self.configuration_calls += 1
@@ -224,6 +225,7 @@ class FakeImu:
         return self.saved_profile
 
     def euler(self):
+        self.euler_calls += 1
         return 0.0, 0.0, 0.0
 
 
@@ -429,6 +431,18 @@ class UserInterfaceTests(unittest.TestCase):
         self.assertEqual(len(self.saved_imu_calibrations), 1)
         self.assertEqual(self.imu_sensor.configuration_calls, 1)
         self.assertEqual(self.imu_sensor.imuplus_calls, 2)
+
+    def test_imu_viewer_streams_orientation_without_driving(self):
+        self.press("t")
+        self.assertEqual(self.user_interface.state, self.user_module.TaskUser.IMU_VIEWER)
+        self.assertFalse(self.line_controller.enabled)
+
+        self.clock.milliseconds = 50
+        next(self.runner)
+        self.assertEqual(self.imu_sensor.euler_calls, 1)
+
+        self.press("e")
+        self.assertEqual(self.user_interface.state, self.user_module.TaskUser.MENU)
 
 
 if __name__ == "__main__":
