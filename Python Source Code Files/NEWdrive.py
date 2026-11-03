@@ -210,3 +210,4 @@ class MotorControlTask:
                 self.stop()
 
             yield
+

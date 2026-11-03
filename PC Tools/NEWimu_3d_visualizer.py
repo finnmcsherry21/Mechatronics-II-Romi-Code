@@ -1,12 +1,22 @@
 """Show the Romi orientation streamed by NEWtaskuser.py over USB serial."""
 
 from serial import Serial, SerialException
-from vpython import box, compound, cross, cylinder, rate, rotate, scene, vector
+from vpython import box, compound, cross, cylinder, label, rate, rotate, scene, vector
 
 
 SERIAL_PORT = "COM10"
 BAUDRATE = 115_200
 SERIAL_TIMEOUT = 0.05
+orientation_offset = [0.0, 0.0, 0.0]
+latest_orientation = [0.0, 0.0, 0.0]
+
+
+def reset_orientation(event):
+    if event.key.lower() == "r":
+        orientation_offset[0] = latest_orientation[0]
+        orientation_offset[1] = latest_orientation[1]
+        orientation_offset[2] = latest_orientation[2]
+        print("IMU viewer orientation reset.")
 
 
 def make_romi():
@@ -21,12 +31,16 @@ def make_romi():
     return compound(parts)
 
 
-def update_orientation(romi, heading, roll, pitch):
+def update_orientation(romi, front_label, heading, roll, pitch):
+    heading -= orientation_offset[0]
+    roll -= orientation_offset[1]
+    pitch -= orientation_offset[2]
+
     forward = vector(1, 0, 0)
     up = vector(0, 1, 0)
 
-    forward = rotate(forward, angle=heading, axis=vector(0, 1, 0))
-    up = rotate(up, angle=heading, axis=vector(0, 1, 0))
+    forward = rotate(forward, angle=-heading, axis=vector(0, 1, 0))
+    up = rotate(up, angle=-heading, axis=vector(0, 1, 0))
 
     left = cross(up, forward)
     forward = rotate(forward, angle=pitch, axis=left)
@@ -35,6 +49,7 @@ def update_orientation(romi, heading, roll, pitch):
 
     romi.axis = forward
     romi.up = up
+    front_label.pos = romi.pos - forward * 0.12 + up * 0.06
 
 
 def read_orientation(serial_port):
@@ -54,11 +69,14 @@ def read_orientation(serial_port):
 
 def main():
     scene.title = "Romi IMU 3D Viewer"
-    scene.caption = "Press Ctrl-C in the terminal to stop streaming.\n"
+    scene.caption = "Press R here to set the current Romi pose as level and forward. Press Ctrl-C in the terminal to stop streaming.\n"
     scene.width = 900
     scene.height = 650
     scene.background = vector(0.92, 0.92, 0.92)
+    scene.bind("keydown", reset_orientation)
     romi = make_romi()
+    front_label = label(text="FRONT", pos=vector(-0.12, 0.06, 0),
+                        height=14, box=False, opacity=0, color=vector(0.8, 0, 0))
 
     try:
         with Serial(SERIAL_PORT, baudrate=BAUDRATE, timeout=SERIAL_TIMEOUT) as serial_port:
@@ -70,7 +88,10 @@ def main():
                     rate(50)
                     orientation = read_orientation(serial_port)
                     if orientation is not None:
-                        update_orientation(romi, *orientation)
+                        latest_orientation[0] = orientation[0]
+                        latest_orientation[1] = orientation[1]
+                        latest_orientation[2] = orientation[2]
+                        update_orientation(romi, front_label, *orientation)
 
             except KeyboardInterrupt:
                 pass

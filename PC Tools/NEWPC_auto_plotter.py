@@ -5,14 +5,14 @@ from serial import Serial, SerialException
 
 
 SERIAL_PORT = "COM10"
-BAUDRATE = 115_200
+BAUDRATE = 115200
 SERIAL_TIMEOUT = 0.25
 MOTOR_COMMANDS = ("l", "r")
 VELOCITY = 7.5
 VELOCITY_KP = 0.25
-VELOCITY_KI = 0.25
-LINE_KP = 0.5
-LINE_KI = 0.5
+VELOCITY_KI = 0.05
+LINE_KP = 0.25
+LINE_KI = 0.05
 NUMERIC_LINE_ENDING = "\r\n"
 END_MARKER = "End of data"
 EXPECTED_HEADERS = (
@@ -24,6 +24,7 @@ EXPECTED_HEADERS = (
 )
 FIRST_RESPONSE_TIMEOUT = 30.0
 BETWEEN_LINES_TIMEOUT = 5.0
+
 
 
 def cleaned_fields(line):
@@ -111,6 +112,7 @@ def send_setup(serial_port):
     serial_port.write(b"k")
     for value in (VELOCITY_KP, VELOCITY_KI, LINE_KP, LINE_KI):
         serial_port.write((str(value) + NUMERIC_LINE_ENDING).encode("utf-8"))
+        print(value)
 
     serial_port.write(b"v")
     serial_port.write((str(VELOCITY) + NUMERIC_LINE_ENDING).encode("utf-8"))
@@ -124,8 +126,11 @@ def main():
             for command in MOTOR_COMMANDS:
                 motor_name = "left" if command == "l" else "right"
                 send_setup(serial_port)
+                command = command + NUMERIC_LINE_ENDING
                 serial_port.write(command.encode("utf-8"))
+                print(command)
                 headers, columns = collect_dataset(serial_port)
+                print(headers, columns)
                 save_response_plot(motor_name, headers, columns)
 
     except SerialException as error:
