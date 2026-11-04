@@ -128,6 +128,27 @@ class VelocityController:
 
         requested_voltage = proportional_voltage + self.integral_gain * self.integral_error
         return max(self.minimum_voltage, min(self.maximum_voltage, requested_voltage))
+    
+    """
+    def discrete_update(self, setpoint, measurement):
+    
+        self.error = float(setpoint) - float(measurement)
+        self.elapsed_time = float(elapsed_time)
+        
+        self.proportional = self.proportional + self.proportional_gain * self.error
+        self.integral = self.integral + self.integral_gain * self.error * self.elapsed_time
+        self.derivative = self.derivative + self.derivative_gain * (self.error - self.previous_error) / self.elapsed_time
+        
+        self.previous_error = self.error
+        
+        self.output = self.proportional + self.integral + self.derivative
+        self.output = max(self.minimum_voltage, min(self.maximum_voltage, self.output))
+        
+        return self.output
+        
+    
+    """
+    
 
 
 class MotorControlTask:
@@ -193,6 +214,14 @@ class MotorControlTask:
                 velocity,
                 self.wheel_encoder.elapsed_time
             )
+            
+            """
+            self.input_voltage = self.velocity_controller.discrete_update(
+                self.velocity_setpoint,
+                velocity
+                )
+            """
+            
 
             effort = 100 * self.input_voltage / 7.2
             self.motor_driver.set_effort(effort)
