@@ -375,7 +375,6 @@ class LaneSwitchController:
         forward_speed = self.wheel_radius * (left_velocity + right_velocity) / 2
         current_heading, _, _ = self.imu_sensor.euler()
         self.relative_heading = self.wrap_angle(current_heading - self.initial_heading)
-        print("bingus")
         self.lateral_position += forward_speed * math.sin(self.relative_heading) * elapsed_time
         self.forward_distance += abs(forward_speed * elapsed_time)
 

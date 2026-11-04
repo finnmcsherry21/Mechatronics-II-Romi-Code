@@ -127,7 +127,8 @@ class VelocityController:
             self.integral_error = candidate_error
 
         requested_voltage = proportional_voltage + self.integral_gain * self.integral_error
-        return max(self.minimum_voltage, min(self.maximum_voltage, requested_voltage))
+        requested_voltage = max(self.minimum_voltage, min(self.maximum_voltage, requested_voltage))
+        return requested_voltage
     
     """
     def discrete_update(self, setpoint, measurement):
@@ -141,10 +142,10 @@ class VelocityController:
         
         self.previous_error = self.error
         
-        self.output = self.proportional + self.integral + self.derivative
-        self.output = max(self.minimum_voltage, min(self.maximum_voltage, self.output))
+        self.requested_voltage_discrete = self.proportional + self.integral + self.derivative
+        self.requested_voltage_discrete = max(self.minimum_voltage, min(self.maximum_voltage, self.requested_voltage_discrete))
         
-        return self.output
+        return self.requested_voltage_discrete
         
     
     """

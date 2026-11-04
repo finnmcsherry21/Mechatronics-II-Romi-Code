@@ -117,6 +117,22 @@ def main():
     imu_sensor.wait_for_mode()
     user_interface.print_help()
     
+    """
+    
+    try:
+        optimal_gains = NEWline_calibration.load_calibration("optimal_gains.json")
+        line_controller.set_optimal_gains(optimal_gains)
+        
+    except OSError:
+            print("No saved optimal gains found. Press G to calibrate.")
+    
+    except ValueError as error:
+        print("Saved optimal gains are invalid:", error)
+        print("Press G to set the optimal gains.")
+        
+    
+    """
+    
     
     # Multitasking setup
     NEWcotask.task_list.append(

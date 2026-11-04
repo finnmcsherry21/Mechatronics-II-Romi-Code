@@ -22,6 +22,7 @@ class TaskUser:
     MOTOR_DATA = 11
     LINE_DATA = 12
     IMU_VIEWER = 13
+    GETTING_OPTIMAL_GAINS = 14
 
     def __init__(self, left_motor_task, right_motor_task, line_controller,
                  line_sensor_array, imu_sensor):
@@ -59,7 +60,8 @@ class TaskUser:
         print("| r/R | Run right motor test                                                   |")
         print("| c/C | Calibrate line sensors                                                 |")
         print("| i/I | Calibrate IMU                                                          |")
-        print("| t/T | Stream IMU orientation to the 3D PC viewer                            |")
+       #print("| g/G | Set the optimal gains                                                  |")
+        print("| t/T | Stream IMU orientation to the 3D PC viewer                             |")
         print("| d/D | Start line following                                                   |")
         print("| m/M | Start manual driving                                                   |")
         print("| e/E | Stop driving and return to menu                                        |")
@@ -329,7 +331,15 @@ class TaskUser:
 
         elif command == "d":
             self.start_line_following()
-
+            
+             
+        # elif command == "g":
+        #     print("Enter optimal velocity and line-controller gains.")
+        #     self.gains_entered = False
+        #     self.gain_step = 0
+        #     self.start_number_input()
+        #     self.state = TaskUser.GETTING_OPTIMAL_GAINS
+        
         elif command == "m":
             self.start_manual_driving()
 
@@ -591,6 +601,10 @@ class TaskUser:
 
             elif self.state == TaskUser.LANE_DIRECTION:
                 self.update_lane_direction()
+                
+            # elif self.state == TaskUser.GETTING_OPTIMAL_GAINS:
+            #     self.update_gains()
+                
 
             else:
                 self.stop_driving()

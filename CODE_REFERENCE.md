@@ -8,6 +8,8 @@ objects are listed by purpose rather than duplicating every fake attribute.
 
 ## Files
 
+Run by pressing 
+
 | File | Purpose |
 | --- | --- |
 | `Python Source Code Files/main.py` | MicroPython boot file; imports and runs `NEWmain.main()`. |
