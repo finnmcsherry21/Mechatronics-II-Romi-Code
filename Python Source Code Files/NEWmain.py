@@ -14,6 +14,7 @@ Run the test code in the project folder:
 
 from pyb import Pin, Timer, I2C
 import NEWimu_calibration
+import NEWgains
 
 import NEWtaskuser
 import NEWcotask
@@ -115,24 +116,20 @@ def main():
 
     imu_sensor.operating_mode_imuplus()
     imu_sensor.wait_for_mode()
-    user_interface.print_help()
-    
-    """
-    
+
     try:
-        optimal_gains = NEWline_calibration.load_calibration("optimal_gains.json")
-        line_controller.set_optimal_gains(optimal_gains)
-        
+        optimal_gains = NEWgains.load_gains("NEWoptimal_gains.json")
+        user_interface.apply_gains(optimal_gains)
+        print("Loaded NEWoptimal_gains.json.")
+
     except OSError:
-            print("No saved optimal gains found. Press G to calibrate.")
-    
+        print("No saved gains found. Press G to enter and save gains.")
+
     except ValueError as error:
-        print("Saved optimal gains are invalid:", error)
-        print("Press G to set the optimal gains.")
-        
-    
-    """
-    
+        print("Saved gains are invalid:", error)
+        print("Press G to enter and save gains.")
+
+    user_interface.print_help()
     
     # Multitasking setup
     NEWcotask.task_list.append(

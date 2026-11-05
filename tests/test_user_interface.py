@@ -251,11 +251,15 @@ class UserInterfaceTests(unittest.TestCase):
         self.user_module.ser = self.serial
         self.saved_line_calibrations = []
         self.saved_imu_calibrations = []
+        self.saved_gains = []
         self.user_module.NEWline_calibration.save_calibration = (
             lambda *args: self.saved_line_calibrations.append(args)
         )
         self.user_module.NEWimu_calibration.save_calibration = (
             lambda *args: self.saved_imu_calibrations.append(args)
+        )
+        self.user_module.NEWgains.save_gains = (
+            lambda *args: self.saved_gains.append(args)
         )
 
         self.left_motor_task = FakeMotorTask()
@@ -330,6 +334,26 @@ class UserInterfaceTests(unittest.TestCase):
         self.enter_number("0.56")
         self.assertEqual(self.user_interface.state, self.user_module.TaskUser.MENU)
         self.assertEqual(self.user_interface.value, 0.56)
+
+    def test_g_command_applies_and_saves_gains(self):
+        self.press("g")
+        for gain in (1.2, 0.15, 0.6, 0.03):
+            self.enter_number(gain)
+
+        self.assertEqual(self.user_interface.state, self.user_module.TaskUser.MENU)
+        self.assertTrue(self.user_interface.gains_entered)
+        self.assertEqual(self.left_motor_task.gains[-1], (1.2, 0.15))
+        self.assertEqual(self.right_motor_task.gains[-1], (1.2, 0.15))
+        self.assertEqual(self.line_controller.gains[-1], (0.6, 0.03))
+        self.assertEqual(self.saved_gains, [(
+            "NEWoptimal_gains.json",
+            {
+                "velocity_kp": 1.2,
+                "velocity_ki": 0.15,
+                "line_kp": 0.6,
+                "line_ki": 0.03,
+            },
+        )])
 
     def test_motor_tests_and_calibration_commands_return_to_menu(self):
         self.enter_ready_motion_values()

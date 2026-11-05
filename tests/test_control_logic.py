@@ -200,6 +200,28 @@ class VelocityControllerTests(unittest.TestCase):
 
 
 class CalibrationTests(unittest.TestCase):
+    def test_gains_round_trip_and_rejects_invalid_data(self):
+        module = load_module("NEWgains")
+        gains = {
+            "velocity_kp": 1.0,
+            "velocity_ki": 0.1,
+            "line_kp": 0.5,
+            "line_ki": 0.05,
+        }
+        filename = os.path.join(PROJECT_ROOT, "tests", "gains_test.json")
+        try:
+            module.save_gains(filename, gains)
+            loaded_gains = module.load_gains(filename)
+        finally:
+            if os.path.exists(filename):
+                os.remove(filename)
+
+        self.assertEqual(loaded_gains, gains)
+        with self.assertRaises(ValueError):
+            module.validate_gains({"velocity_kp": 1.0})
+        with self.assertRaises(ValueError):
+            module.validate_gains(dict(gains, line_ki=-0.1))
+
     def test_line_calibration_rejects_missing_keys(self):
         module = load_module("NEWline_calibration")
         with self.assertRaises(ValueError):

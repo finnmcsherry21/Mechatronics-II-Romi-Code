@@ -37,6 +37,14 @@ The script sends gains and a velocity setpoint, triggers left- and right-wheel
 tests, then overwrites `latest_left_motor_response.png` and
 `latest_right_motor_response.png`. It does not save CSV files.
 
+## Saved controller gains
+
+At the Romi command menu, press `G` to enter the velocity Kp/Ki and line Kp/Ki
+gains and save them as `NEWoptimal_gains.json`. Valid saved gains are applied
+automatically on the next startup; you still need to enter a velocity setpoint
+with `V` before starting a motor test or line following. Press `K` to apply a
+temporary set of gains without changing the saved file.
+
 ## Desktop checks
 
 After installing the PC requirements, run this from the repository root:

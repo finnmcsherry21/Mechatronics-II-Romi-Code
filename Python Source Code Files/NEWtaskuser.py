@@ -1,10 +1,12 @@
 import pyb
 import NEWline_calibration
 import NEWimu_calibration
+import NEWgains
 import time
 
 
 ser = pyb.USB_VCP()
+OPTIMAL_GAINS_FILENAME = "NEWoptimal_gains.json"
 
 
 class TaskUser:
@@ -22,7 +24,6 @@ class TaskUser:
     MOTOR_DATA = 11
     LINE_DATA = 12
     IMU_VIEWER = 13
-    GETTING_OPTIMAL_GAINS = 14
 
     def __init__(self, left_motor_task, right_motor_task, line_controller,
                  line_sensor_array, imu_sensor):
@@ -46,6 +47,7 @@ class TaskUser:
         self.number_buffer = []
         self.number_invalid = False
         self.gain_step = 0
+        self.save_gains_on_completion = False
         self.output_motor_task = None
         self.print_index = -1
 
@@ -60,7 +62,7 @@ class TaskUser:
         print("| r/R | Run right motor test                                                   |")
         print("| c/C | Calibrate line sensors                                                 |")
         print("| i/I | Calibrate IMU                                                          |")
-       #print("| g/G | Set the optimal gains                                                  |")
+        print("| g/G | Enter and save velocity and line-controller gains                     |")
         print("| t/T | Stream IMU orientation to the 3D PC viewer                             |")
         print("| d/D | Start line following                                                   |")
         print("| m/M | Start manual driving                                                   |")
@@ -308,11 +310,10 @@ class TaskUser:
             self.state = TaskUser.SETPOINT
 
         elif command == "k":
-            print("Enter velocity proportional gain.")
-            self.gains_entered = False
-            self.gain_step = 0
-            self.start_number_input()
-            self.state = TaskUser.GAINS
+            self.start_gain_entry(save_on_completion=False)
+
+        elif command == "g":
+            self.start_gain_entry(save_on_completion=True)
 
         elif command == "l":
             self.start_motor_test(self.left_motor_task, TaskUser.LEFT_TEST)
@@ -333,13 +334,6 @@ class TaskUser:
             self.start_line_following()
             
              
-        # elif command == "g":
-        #     print("Enter optimal velocity and line-controller gains.")
-        #     self.gains_entered = False
-        #     self.gain_step = 0
-        #     self.start_number_input()
-        #     self.state = TaskUser.GETTING_OPTIMAL_GAINS
-        
         elif command == "m":
             self.start_manual_driving()
 
@@ -364,6 +358,36 @@ class TaskUser:
             self.setpoint_entered = True
             print("Velocity setpoint is {} rad/s.".format(self.value))
             self.state = TaskUser.MENU
+
+    def start_gain_entry(self, save_on_completion):
+        if save_on_completion:
+            print("Enter gains to save for the next startup.")
+        print("Enter velocity proportional gain.")
+        self.gains_entered = False
+        self.gain_step = 0
+        self.save_gains_on_completion = save_on_completion
+        self.start_number_input()
+        self.state = TaskUser.GAINS
+
+    def gain_values(self):
+        return {
+            "velocity_kp": self.k_p,
+            "velocity_ki": self.k_i,
+            "line_kp": self.kp_line,
+            "line_ki": self.ki_line,
+        }
+
+    def apply_gains(self, gains):
+        """Apply a validated saved gain dictionary to all controllers."""
+        gains = NEWgains.validate_gains(gains)
+        self.k_p = gains["velocity_kp"]
+        self.k_i = gains["velocity_ki"]
+        self.kp_line = gains["line_kp"]
+        self.ki_line = gains["line_ki"]
+        self.left_motor_task.set_gains(self.k_p, self.k_i)
+        self.right_motor_task.set_gains(self.k_p, self.k_i)
+        self.line_controller.set_gains(self.kp_line, self.ki_line)
+        self.gains_entered = True
 
     def update_gains(self):
         number = self.read_number()
@@ -402,10 +426,18 @@ class TaskUser:
 
         else:
             self.ki_line = number
-            self.line_controller.set_gains(self.kp_line, self.ki_line)
-            self.gains_entered = True
+            self.apply_gains(self.gain_values())
             print("Line Ki set to {}.".format(self.ki_line))
             print("Controller gains updated.")
+
+            if self.save_gains_on_completion:
+                try:
+                    NEWgains.save_gains(OPTIMAL_GAINS_FILENAME, self.gain_values())
+                    print("Saved gains to {}.".format(OPTIMAL_GAINS_FILENAME))
+                except (OSError, ValueError) as error:
+                    print("Gains were applied but not saved:", error)
+
+            self.save_gains_on_completion = False
             self.state = TaskUser.MENU
 
     def update_manual_driving(self):
@@ -601,10 +633,6 @@ class TaskUser:
 
             elif self.state == TaskUser.LANE_DIRECTION:
                 self.update_lane_direction()
-                
-            # elif self.state == TaskUser.GETTING_OPTIMAL_GAINS:
-            #     self.update_gains()
-                
 
             else:
                 self.stop_driving()
