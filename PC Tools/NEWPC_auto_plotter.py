@@ -1,3 +1,5 @@
+from math import isfinite
+from pathlib import Path
 from time import monotonic
 
 from matplotlib import pyplot
@@ -36,45 +38,56 @@ def cleaned_fields(line):
     return [field.strip() for field in content.split(",")]
 
 
-def collect_dataset(serial_port):
+def collect_dataset(serial_port, clock=monotonic):
+    """Read one complete motor-test response from ``serial_port``.
+
+    Non-data console messages are ignored, but a response must contain the
+    expected header, at least one complete finite numeric row, and its end
+    marker.  ``clock`` is injectable so the timeout behavior is testable
+    without waiting for a real serial port.
+    """
     headers = None
     columns = None
-    waiting_since = monotonic()
+    waiting_since = clock()
 
     while True:
         raw_line = serial_port.readline()
 
         if not raw_line:
             timeout = FIRST_RESPONSE_TIMEOUT if headers is None else BETWEEN_LINES_TIMEOUT
-            if monotonic() - waiting_since >= timeout:
+            if clock() - waiting_since >= timeout:
                 if headers is None:
                     raise TimeoutError("No motor-response header was received.")
                 raise TimeoutError("Motor response ended before End of data.")
             continue
 
-        waiting_since = monotonic()
+        waiting_since = clock()
         line = raw_line.decode("utf-8", errors="replace").strip()
-
-        if line == END_MARKER:
-            break
-
         fields = cleaned_fields(line)
 
         if not fields:
             continue
 
+        # Parse the marker like every other serial line, so trailing comments
+        # or incidental whitespace do not cause a false timeout.
+        if fields == [END_MARKER]:
+            break
+
         if headers is None:
             if tuple(fields) == EXPECTED_HEADERS:
-                headers = fields
+                headers = list(EXPECTED_HEADERS)
                 columns = [[] for _ in headers]
             continue
 
-        if len(fields) < len(headers):
+        if len(fields) != len(headers):
             continue
 
         try:
-            values = [float(field) for field in fields[:len(headers)]]
+            values = [float(field) for field in fields]
         except ValueError:
+            continue
+
+        if not all(isfinite(value) for value in values):
             continue
 
         for column, value in zip(columns, values):
@@ -86,7 +99,25 @@ def collect_dataset(serial_port):
     return headers, columns
 
 
-def save_response_plot(motor_name, headers, columns):
+def validate_dataset(headers, columns):
+    """Raise ``ValueError`` unless *columns* match the motor-test protocol."""
+    if tuple(headers) != EXPECTED_HEADERS:
+        raise ValueError("Unexpected motor-response headers.")
+
+    if len(columns) != len(headers) or not columns or not columns[0]:
+        raise ValueError("No valid motor-response data was received.")
+
+    sample_count = len(columns[0])
+    if any(len(column) != sample_count for column in columns):
+        raise ValueError("Motor-response columns have different lengths.")
+
+    if not all(isfinite(value) for column in columns for value in column):
+        raise ValueError("Motor-response data contains a non-finite value.")
+
+
+def save_response_plot(motor_name, headers, columns, output_directory="."):
+    """Save a velocity/voltage plot and return its path."""
+    validate_dataset(headers, columns)
     figure, axes = pyplot.subplots(2, 1, sharex=True)
 
     axes[0].plot(columns[0], columns[2], label=headers[2])
@@ -102,10 +133,11 @@ def save_response_plot(motor_name, headers, columns):
 
     figure.suptitle("{} Motor Response".format(motor_name.title()))
     figure.tight_layout()
-    filename = "latest_{}_motor_response.png".format(motor_name)
+    filename = Path(output_directory) / "latest_{}_motor_response.png".format(motor_name)
     figure.savefig(filename, dpi=200)
     pyplot.close(figure)
     print("Updated {}.".format(filename))
+    return filename
 
 
 def send_setup(serial_port):
@@ -118,20 +150,22 @@ def send_setup(serial_port):
     serial_port.write((str(VELOCITY) + NUMERIC_LINE_ENDING).encode("utf-8"))
 
 
+def run_motor_tests(serial_port):
+    """Configure the Romi and collect plots for every requested motor."""
+    for command in MOTOR_COMMANDS:
+        motor_name = "left" if command == "l" else "right"
+        send_setup(serial_port)
+        serial_port.write(command.encode("ascii"))
+        print("Starting {} motor test.".format(motor_name))
+        headers, columns = collect_dataset(serial_port)
+        save_response_plot(motor_name, headers, columns)
+
+
 def main():
     try:
         with Serial(SERIAL_PORT, baudrate=BAUDRATE, timeout=SERIAL_TIMEOUT) as serial_port:
             serial_port.reset_input_buffer()
-
-            for command in MOTOR_COMMANDS:
-                motor_name = "left" if command == "l" else "right"
-                send_setup(serial_port)
-                command = command + NUMERIC_LINE_ENDING
-                serial_port.write(command.encode("utf-8"))
-                print(command)
-                headers, columns = collect_dataset(serial_port)
-                print(headers, columns)
-                save_response_plot(motor_name, headers, columns)
+            run_motor_tests(serial_port)
 
     except SerialException as error:
         raise SystemExit("Serial-port error: {}".format(error))
