@@ -1,4 +1,14 @@
-"""Show the Romi orientation streamed by NEWtaskuser.py over USB serial."""
+"""Show the Romi orientation streamed by NEWtaskuser.py over USB serial.
+
+To run:
+Close PuTTY
+
+python "PC Tools/NEWimu_3d_visualizer.py"
+
+
+
+"""
+
 
 from serial import Serial, SerialException
 from vpython import box, compound, cross, cylinder, label, rate, rotate, scene, vector
