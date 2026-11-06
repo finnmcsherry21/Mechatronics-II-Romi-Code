@@ -24,6 +24,7 @@ import gc
 from NEWimudriver import BNO055
 from NEWdrive import MotorDriver, WheelEncoder, MotorControlTask
 from NEWlinecontrol import LineSensorArray, LineController
+from NEWfinaltrack import FinalTrack
 
 
 # ----- Motor setup -----
@@ -76,6 +77,8 @@ def main():
     line_sensor_array = LineSensorArray()
     line_controller = LineController(left_motor_task, right_motor_task, line_sensor_array, imu_sensor)
     user_interface = NEWtaskuser.TaskUser(left_motor_task, right_motor_task, line_controller, line_sensor_array, imu_sensor)
+    final_track = FinalTrack()
+
 
     try:
         channels = list(range(1, 14))
@@ -158,6 +161,13 @@ def main():
                 name="User Input Task",
                 priority=0,
                 period=1,
+                profile=True))
+    
+    NEWcotask.task_list.append(
+    NEWcotask.Task(final_track.run(),
+                name="Final Track Task",
+                priority=1,
+                period=20,
                 profile=True))
     
 

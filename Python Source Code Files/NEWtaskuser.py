@@ -25,8 +25,8 @@ class TaskUser:
     LINE_DATA = 12
     IMU_VIEWER = 13
 
-    def __init__(self, left_motor_task, right_motor_task, line_controller,
-                 line_sensor_array, imu_sensor):
+    def __init__(self, left_motor_task, right_motor_task, line_controller, line_sensor_array, imu_sensor):
+        
         self.state = TaskUser.MENU
         self.left_motor_task = left_motor_task
         self.right_motor_task = right_motor_task
