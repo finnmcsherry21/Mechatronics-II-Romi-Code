@@ -12,12 +12,12 @@ SERIAL_TIMEOUT = 0.25
 MOTOR_COMMANDS = ("l", "r")
 RUN_STRAIGHT_DRIVE = True
 STRAIGHT_DRIVE_DURATION = 5.0
-VELOCITY = 7.5
-VELOCITY_KP = 0.25
-VELOCITY_KI = 0.05
+VELOCITY = 15
+VELOCITY_KP = 0.35
+VELOCITY_KI = 0.45
 LINE_KP = 0.25
 LINE_KI = 0.05
-NUMERIC_LINE_ENDING = "\r\n"
+NUMERIC_LINE_ENDING = "\r"
 END_MARKER = "End of data"
 EXPECTED_HEADERS = (
     "Time(s)",
@@ -38,6 +38,16 @@ def cleaned_fields(line):
         return []
 
     return [field.strip() for field in content.split(",")]
+
+
+def next_run_number(output_directory="."):
+    """Return the next run number based on existing numbered response plots."""
+    numbers = []
+    for path in Path(output_directory).glob("*_motor_response_*.png"):
+        suffix = path.stem.rsplit("_", 1)[-1]
+        if suffix.isdigit():
+            numbers.append(int(suffix))
+    return max(numbers, default=0) + 1
 
 
 def collect_dataset(serial_port, clock=monotonic):
@@ -117,7 +127,8 @@ def validate_dataset(headers, columns):
         raise ValueError("Motor-response data contains a non-finite value.")
 
 
-def save_response_plot(motor_name, headers, columns, output_directory="."):
+def save_response_plot(
+        motor_name, headers, columns, output_directory=".", run_number=1):
     """Save a velocity/voltage plot and return its path."""
     validate_dataset(headers, columns)
     figure, axes = pyplot.subplots(2, 1, sharex=True)
@@ -135,7 +146,8 @@ def save_response_plot(motor_name, headers, columns, output_directory="."):
 
     figure.suptitle("{} Motor Response".format(motor_name.title()))
     figure.tight_layout()
-    filename = Path(output_directory) / "latest_{}_motor_response.png".format(motor_name)
+    filename = Path(output_directory) / "{}_motor_response_{}.png".format(
+        motor_name, run_number)
     figure.savefig(filename, dpi=200)
     pyplot.close(figure)
     print("Updated {}.".format(filename))
@@ -152,35 +164,44 @@ def send_setup(serial_port):
     serial_port.write((str(VELOCITY) + NUMERIC_LINE_ENDING).encode("utf-8"))
 
 
-def run_motor_tests(serial_port):
+def run_motor_tests(serial_port, run_number=None):
     """Configure the Romi and collect plots for every requested motor."""
+    if run_number is None:
+        run_number = next_run_number()
+
     for command in MOTOR_COMMANDS:
         motor_name = "left" if command == "l" else "right"
         send_setup(serial_port)
         serial_port.write(command.encode("ascii"))
         print("Starting {} motor test.".format(motor_name))
         headers, columns = collect_dataset(serial_port)
-        save_response_plot(motor_name, headers, columns)
+        save_response_plot(motor_name, headers, columns, run_number=run_number)
 
 
-def run_straight_drive(serial_port, duration=STRAIGHT_DRIVE_DURATION):
+def run_straight_drive(
+        serial_port, duration=STRAIGHT_DRIVE_DURATION, run_number=None):
     """Configure the Romi, run ``u``, and plot its printed motor response."""
+    if run_number is None:
+        run_number = next_run_number()
+
     send_setup(serial_port)
     serial_port.write(b"u")
     serial_port.write((str(duration) + NUMERIC_LINE_ENDING).encode("utf-8"))
     print("Starting straight drive for {} seconds.".format(duration))
     headers, columns = collect_dataset(serial_port)
-    return save_response_plot("straight", headers, columns)
+    return save_response_plot(
+        "straight", headers, columns, run_number=run_number)
 
 
 def main():
     try:
         with Serial(SERIAL_PORT, baudrate=BAUDRATE, timeout=SERIAL_TIMEOUT) as serial_port:
             serial_port.reset_input_buffer()
+            run_number = next_run_number()
             if RUN_STRAIGHT_DRIVE:
-                run_straight_drive(serial_port)
+                run_straight_drive(serial_port, run_number=run_number)
             else:
-                run_motor_tests(serial_port)
+                run_motor_tests(serial_port, run_number=run_number)
 
     except SerialException as error:
         raise SystemExit("Serial-port error: {}".format(error))
