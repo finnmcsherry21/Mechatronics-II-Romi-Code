@@ -24,6 +24,9 @@ class TaskUser:
     MOTOR_DATA = 11
     LINE_DATA = 12
     IMU_VIEWER = 13
+    STRAIGHT_DRIVE_INPUT = 14
+    STRAIGHT_DRIVE = 15
+    
 
     def __init__(self, left_motor_task, right_motor_task, line_controller, line_sensor_array, imu_sensor):
         
@@ -50,6 +53,7 @@ class TaskUser:
         self.save_gains_on_completion = False
         self.output_motor_task = None
         self.print_index = -1
+        self.straight_drive_duration = 0.0
 
     def print_help(self):
         print("+------------------------------------------------------------------------------+")
@@ -62,10 +66,11 @@ class TaskUser:
         print("| r/R | Run right motor test                                                   |")
         print("| c/C | Calibrate line sensors                                                 |")
         print("| i/I | Calibrate IMU                                                          |")
-        print("| g/G | Enter and save velocity and line-controller gains                     |")
+        print("| g/G | Enter and save velocity and line-controller gains                      |")
         print("| t/T | Stream IMU orientation to the 3D PC viewer                             |")
         print("| d/D | Start line following                                                   |")
         print("| m/M | Start manual driving                                                   |")
+        print("| u/U | Drive straight for a set time                                          |")
         print("| e/E | Stop driving and return to menu                                        |")
         print("+-----+------------------------------------------------------------------------+")
 
@@ -294,6 +299,20 @@ class TaskUser:
         self.next_imu_viewer_time = time.ticks_ms()
         print("Streaming IMU orientation for the PC 3D viewer. Press E to stop.")
         self.state = TaskUser.IMU_VIEWER
+        
+    def start_drive_straight(self, duration_s):
+        if not self.ready_for_motion():
+            return
+
+        self.stop_driving()
+        self.left_motor_task.test_duration = duration_s
+        self.right_motor_task.test_duration = duration_s
+        self.left_motor_task.start(self.value, continuous=False)
+        self.right_motor_task.start(self.value, continuous=False)
+        self.line_sensor_array.start_logging()
+        self.output_motor_task = self.left_motor_task
+        self.print_index = -1
+        self.state = TaskUser.STRAIGHT_DRIVE
 
     def update_menu(self):
         command = self.read_command()
@@ -308,7 +327,12 @@ class TaskUser:
             print("Enter velocity setpoint in range [-25.0, 25.0] rad/s.")
             self.start_number_input()
             self.state = TaskUser.SETPOINT
-
+            
+        elif command == "u":
+            print("How long should the robot drive straight for? Enter time in seconds.")
+            self.start_number_input()
+            self.state = TaskUser.STRAIGHT_DRIVE_INPUT
+            
         elif command == "k":
             self.start_gain_entry(save_on_completion=False)
 
@@ -569,6 +593,27 @@ class TaskUser:
         elif command is not None:
             print("Use L for left, R for right, or E to cancel.")
 
+    def update_straight_drive_input(self):
+        number = self.read_number()
+        
+        if number == "cancel":
+            print("Drive straight command cancelled.")
+            self.state = TaskUser.MENU
+            
+        elif number is not None:
+            self.straight_drive_duration = max(0.0, min(10.0, number))
+            print("Drive straight for {} seconds.".format(self.straight_drive_duration))
+            self.start_drive_straight(self.straight_drive_duration)
+        
+        
+        
+    def update_straight_drive(self):
+        if self.left_motor_task.finished and self.right_motor_task.finished:
+            self.line_sensor_array.stop_logging()
+            print("Drive straight complete.")
+            self.state = TaskUser.MOTOR_DATA
+
+
     def run(self):
         while True:
             if self.state == TaskUser.MENU:
@@ -633,6 +678,13 @@ class TaskUser:
 
             elif self.state == TaskUser.LANE_DIRECTION:
                 self.update_lane_direction()
+             
+               
+            elif self.state == TaskUser.STRAIGHT_DRIVE_INPUT:
+                self.update_straight_drive_input()
+
+            elif self.state == TaskUser.STRAIGHT_DRIVE:
+                self.update_straight_drive()
 
             else:
                 self.stop_driving()

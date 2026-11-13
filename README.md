@@ -33,9 +33,11 @@ Run `PC Tools/NEWPC_auto_plotter.py` on the computer, not on the STM32. It requi
 `pyserial` and `matplotlib`; set `SERIAL_PORT` to the COM port assigned to the
 Romi's USB virtual COM port.
 
-The script sends gains and a velocity setpoint, triggers left- and right-wheel
-tests, then overwrites `latest_left_motor_response.png` and
-`latest_right_motor_response.png`. It does not save CSV files.
+The script sends gains and a velocity setpoint, then runs the straight-drive
+command by default. It overwrites `latest_straight_motor_response.png` with
+the motor data printed by the Romi. Set `RUN_STRAIGHT_DRIVE = False` in
+`PC Tools/NEWPC_auto_plotter.py` to run the original left- and right-wheel
+tests instead. The script does not save CSV files.
 
 ## Saved controller gains
 

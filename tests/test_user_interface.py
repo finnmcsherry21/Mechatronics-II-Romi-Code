@@ -89,6 +89,7 @@ class FakeMotorTask:
     def __init__(self):
         self.wheel_encoder = FakeWheelEncoder()
         self.finished = False
+        self.test_duration = 5.0
         self.started = []
         self.setpoints = []
         self.gains = []
@@ -304,6 +305,55 @@ class UserInterfaceTests(unittest.TestCase):
         self.assertEqual(self.user_interface.state, self.user_module.TaskUser.MENU)
         self.assertEqual(self.left_motor_task.started, [])
         self.assertEqual(self.right_motor_task.started, [])
+
+    def test_straight_drive_uses_requested_duration_and_waits_for_completion(self):
+        self.enter_ready_motion_values()
+
+        self.press("u")
+        self.assertEqual(
+            self.user_interface.state,
+            self.user_module.TaskUser.STRAIGHT_DRIVE_INPUT
+        )
+        self.enter_number(2.5)
+
+        self.assertEqual(
+            self.user_interface.state,
+            self.user_module.TaskUser.STRAIGHT_DRIVE
+        )
+        self.assertEqual(self.left_motor_task.test_duration, 2.5)
+        self.assertEqual(self.right_motor_task.test_duration, 2.5)
+        self.assertEqual(self.left_motor_task.started[-1], (8.0, False))
+        self.assertEqual(self.right_motor_task.started[-1], (8.0, False))
+        self.assertEqual(self.left_motor_task.gains[-1], (1.0, 0.1))
+        self.assertEqual(self.right_motor_task.gains[-1], (1.0, 0.1))
+        self.assertTrue(self.line_sensor_array.logging)
+
+        self.left_motor_task.finished = True
+        self.right_motor_task.finished = True
+        next(self.runner)
+
+        self.assertEqual(
+            self.user_interface.state,
+            self.user_module.TaskUser.MOTOR_DATA
+        )
+        self.assertIs(
+            self.user_interface.output_motor_task,
+            self.left_motor_task
+        )
+        self.assertFalse(self.line_sensor_array.logging)
+
+        next(self.runner)
+        next(self.runner)
+        self.assertEqual(self.user_interface.state, self.user_module.TaskUser.MENU)
+
+        self.press("u")
+        self.enter_number(1.0)
+        self.assertEqual(
+            self.user_interface.state,
+            self.user_module.TaskUser.STRAIGHT_DRIVE
+        )
+        self.assertEqual(self.left_motor_task.started[-1], (8.0, False))
+        self.assertEqual(self.right_motor_task.started[-1], (8.0, False))
 
     def test_help_setpoint_and_gains_flow(self):
         self.press("h")

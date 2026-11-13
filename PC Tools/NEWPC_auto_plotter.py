@@ -10,6 +10,8 @@ SERIAL_PORT = "COM10"
 BAUDRATE = 115200
 SERIAL_TIMEOUT = 0.25
 MOTOR_COMMANDS = ("l", "r")
+RUN_STRAIGHT_DRIVE = True
+STRAIGHT_DRIVE_DURATION = 5.0
 VELOCITY = 7.5
 VELOCITY_KP = 0.25
 VELOCITY_KI = 0.05
@@ -161,11 +163,24 @@ def run_motor_tests(serial_port):
         save_response_plot(motor_name, headers, columns)
 
 
+def run_straight_drive(serial_port, duration=STRAIGHT_DRIVE_DURATION):
+    """Configure the Romi, run ``u``, and plot its printed motor response."""
+    send_setup(serial_port)
+    serial_port.write(b"u")
+    serial_port.write((str(duration) + NUMERIC_LINE_ENDING).encode("utf-8"))
+    print("Starting straight drive for {} seconds.".format(duration))
+    headers, columns = collect_dataset(serial_port)
+    return save_response_plot("straight", headers, columns)
+
+
 def main():
     try:
         with Serial(SERIAL_PORT, baudrate=BAUDRATE, timeout=SERIAL_TIMEOUT) as serial_port:
             serial_port.reset_input_buffer()
-            run_motor_tests(serial_port)
+            if RUN_STRAIGHT_DRIVE:
+                run_straight_drive(serial_port)
+            else:
+                run_motor_tests(serial_port)
 
     except SerialException as error:
         raise SystemExit("Serial-port error: {}".format(error))

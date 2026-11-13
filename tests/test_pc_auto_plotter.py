@@ -114,6 +114,26 @@ class AutoPlotterTests(unittest.TestCase):
         self.assertEqual(save_plot.call_args_list[0].args[0], "left")
         self.assertEqual(save_plot.call_args_list[1].args[0], "right")
 
+    def test_straight_drive_sends_duration_and_saves_plot(self):
+        serial_port = FakeSerial()
+        headers = list(self.plotter.EXPECTED_HEADERS)
+        columns = [[0.0], [0.0], [0.0], [0.0], [self.plotter.VELOCITY]]
+
+        with patch.object(self.plotter, "collect_dataset", return_value=(headers, columns)), \
+             patch.object(self.plotter, "save_response_plot") as save_plot:
+            self.plotter.run_straight_drive(serial_port, duration=2.5)
+
+        expected_setup = [
+            b"k",
+            b"0.25\r\n", b"0.05\r\n", b"0.25\r\n", b"0.05\r\n",
+            b"v", b"7.5\r\n",
+        ]
+        self.assertEqual(
+            serial_port.writes,
+            expected_setup + [b"u", b"2.5\r\n"]
+        )
+        self.assertEqual(save_plot.call_args.args[0], "straight")
+
     def test_save_response_plot_creates_a_png(self):
         headers = list(self.plotter.EXPECTED_HEADERS)
         columns = [[0.0, 1.0], [0.0, 0.2], [1.0, 2.0], [2.0, 3.0], [1.5, 1.5]]

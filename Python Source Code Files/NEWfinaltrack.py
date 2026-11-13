@@ -41,6 +41,34 @@ class FinalTrack:
         self.state = 0
         self.button_pin = Pin(Pin.cpu.C13, mode=Pin.IN, pull=Pin.PULL_UP)
         
+    def line_follow(self, speed, kp, ki, stop_condition):
+        self.line_controller.set_gains(kp, ki)
+        self.line_controller.enable(speed)
+        self.line_controller.left_motor_task.start(speed, continuous=True)
+        self.line_controller.right_motor_task.start(speed, continuous=True)
+
+
+    def lane_change(self, direction, speed, duration_ms, yaw_rate_gain):
+        self.line_controller.set_velocity_setpoint(speed)
+        self.line_controller.lane_switch_controller.timeout_ms = duration_ms
+        self.line_controller.lane_switch_controller.yaw_rate_gain = yaw_rate_gain
+        return self.line_controller.request_lane_switch(1 if direction == "left" else -1)
+
+
+    def dead_reckon(self, distance, speed, heading):
+        pass
+
+
+    def rotate(self, angle, speed):
+        pass
+
+
+    def ultrasonic_approach(self, target_distance, speed):
+        pass
+
+
+    def stop(self):
+        self.line_controller.stop()
 
 
     def run(self):
